@@ -8,10 +8,12 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class Member(
     val id: String,
-    val auth_id: String? = null,
     val name: String,
     val role: String,
-    val months_used: Int
+    val months_used: Int,
+    val auth_id: String? = null,
+    val fcm_token: String? = null,
+    val created_at: String? = null
 )
 
 @Serializable
@@ -56,6 +58,12 @@ class SubscriptionRepository {
     suspend fun getUnclaimedMembers(): List<Member> = withContext(Dispatchers.IO) {
         // Only return members that haven't been linked to an account yet
         getMembers().filter { it.auth_id.isNullOrBlank() }
+    }
+
+    suspend fun updateFcmToken(memberId: String, token: String) = withContext(Dispatchers.IO) {
+        supabase.postgrest["members"].update(mapOf("fcm_token" to token)) {
+            filter { eq("id", memberId) }
+        }
     }
 
     suspend fun claimProfile(memberId: String, authId: String) = withContext(Dispatchers.IO) {

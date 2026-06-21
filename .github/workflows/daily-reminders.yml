@@ -1,0 +1,31 @@
+name: Daily Installment Reminders
+
+on:
+  schedule:
+    # Runs at 04:00 UTC every day (which is roughly 9:30 AM in India/Sri Lanka)
+    - cron: '0 4 * * *'
+  workflow_dispatch: # Allows manual trigger from the GitHub Actions tab
+
+jobs:
+  send-reminders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        working-directory: ./scripts
+        run: npm install
+
+      - name: Run reminders script
+        working-directory: ./scripts
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: npm start

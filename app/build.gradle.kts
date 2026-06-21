@@ -2,6 +2,7 @@ plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
   alias(libs.plugins.kotlin.serialization)
+  alias(libs.plugins.google.services)
 }
 
 android {
@@ -92,4 +93,8 @@ dependencies {
   implementation(libs.supabase.auth)
   implementation(libs.ktor.client.android)
   implementation(libs.kotlinx.serialization.json)
+
+  // Firebase
+  implementation(platform(libs.firebase.bom))
+  implementation(libs.firebase.messaging)
 }

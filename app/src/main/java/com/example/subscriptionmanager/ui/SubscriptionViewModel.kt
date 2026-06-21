@@ -113,6 +113,18 @@ class SubscriptionViewModel : ViewModel() {
                 val cal = java.util.Calendar.getInstance()
                 val currentYear = cal.get(java.util.Calendar.YEAR)
                 val currentMonth = cal.get(java.util.Calendar.MONTH) + 1
+                
+                val currentMember = dbMembers.find { it.auth_id == authUser.id }
+                if (currentMember != null) {
+                    com.google.firebase.messaging.FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                        if (task.isSuccessful) {
+                            viewModelScope.launch {
+                                repository.updateFcmToken(currentMember.id, task.result)
+                            }
+                        }
+                    }
+                }
+
                 var dynamicMonthsUsed = (currentYear - 2026) * 12 + (currentMonth - 5) + 1 // May 2026
                 if (dynamicMonthsUsed < 1) dynamicMonthsUsed = 1
 

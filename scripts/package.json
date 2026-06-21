@@ -1,0 +1,13 @@
+{
+  "name": "submanager-reminders",
+  "version": "1.0.0",
+  "description": "Daily reminders script for SubManager",
+  "main": "send_reminders.js",
+  "scripts": {
+    "start": "node send_reminders.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "firebase-admin": "^12.0.0"
+  }
+}
