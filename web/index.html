@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SubManager — Spotify Group Dashboard</title>
+  <meta name="description" content="Manage your Spotify Premium group subscription. View payment status, history, and add payments from any device." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg: #0d0d0d;
+      --card: #1e2740;
+      --card2: #111827;
+      --green: #4CAF50;
+      --red: #E05252;
+      --orange: #FFA726;
+      --muted: #8A9BB5;
+      --white: #ffffff;
+      --border: #2D3A55;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--white); min-height: 100vh; }
+
+    /* Auth Screen */
+    #auth-screen {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-height: 100vh; padding: 24px;
+    }
+    .logo { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
+    .logo span { color: var(--green); }
+    .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 40px; }
+    .auth-card {
+      background: var(--card); border-radius: 20px; padding: 32px; width: 100%; max-width: 400px;
+    }
+    .auth-card h2 { font-size: 20px; margin-bottom: 24px; }
+    .input-group { margin-bottom: 16px; }
+    .input-group label { display: block; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
+    .input-group input {
+      width: 100%; padding: 14px 16px; background: var(--bg); border: 1.5px solid var(--border);
+      border-radius: 12px; color: var(--white); font-size: 14px; font-family: 'Inter', sans-serif;
+      outline: none; transition: border-color 0.2s;
+    }
+    .input-group input:focus { border-color: var(--green); }
+    .btn {
+      width: 100%; padding: 14px; background: var(--green); color: white; border: none;
+      border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer;
+      font-family: 'Inter', sans-serif; transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .error-msg { color: var(--red); font-size: 13px; margin-top: 12px; display: none; }
+
+    /* App Screen */
+    #app-screen { display: none; }
+    .topbar {
+      background: var(--card2); padding: 16px 20px; display: flex;
+      align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10;
+    }
+    .topbar-title { font-size: 18px; font-weight: 700; }
+    .topbar-title span { color: var(--green); }
+    .logout-btn {
+      background: transparent; border: 1.5px solid var(--red); color: var(--red);
+      padding: 8px 16px; border-radius: 10px; cursor: pointer; font-size: 13px;
+      font-family: 'Inter', sans-serif; font-weight: 600;
+    }
+    .main { padding: 20px; max-width: 600px; margin: 0 auto; }
+    .section-title { font-size: 18px; font-weight: 700; margin: 24px 0 14px; }
+
+    .status-badge {
+      display: inline-block; padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 600;
+    }
+    .badge-active { background: #1A2E20; color: var(--green); }
+    .badge-due { background: #3D1A1A; color: var(--red); }
+    .badge-warning { background: #3D2A10; color: var(--orange); }
+
+    .card {
+      background: var(--card); border-radius: 20px; padding: 20px; margin-bottom: 14px;
+    }
+    .card-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .card-label { color: var(--muted); font-size: 13px; }
+    .card-value { font-weight: 600; font-size: 14px; }
+    .progress-bar { background: var(--border); border-radius: 50px; height: 8px; overflow: hidden; margin: 12px 0 6px; }
+    .progress-fill { height: 100%; border-radius: 50px; transition: width 0.8s ease; }
+
+    .payment-form { background: var(--card); border-radius: 20px; padding: 20px; }
+    .payment-form h3 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+    .form-row { display: flex; gap: 12px; }
+    .form-row .input-group { flex: 1; }
+    .form-submit { margin-top: 16px; }
+
+    .transaction { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+    .transaction:last-child { border-bottom: none; }
+    .tx-icon { width: 40px; height: 40px; background: #1A2E20; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+    .tx-info { flex: 1; }
+    .tx-month { font-weight: 600; font-size: 14px; }
+    .tx-date { color: var(--muted); font-size: 12px; }
+    .tx-amount { font-weight: 700; color: var(--green); font-size: 16px; }
+
+    .ping-banner {
+      background: #3D2A10; border-radius: 16px; padding: 16px; margin-bottom: 16px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .ping-banner p { font-size: 13px; line-height: 1.5; }
+    .ping-banner strong { color: var(--orange); }
+    .ping-close { background: transparent; border: none; color: var(--muted); cursor: pointer; font-size: 18px; margin-left: auto; }
+
+    .member-card-name { font-weight: 600; font-size: 15px; }
+    .member-card-sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .avatar { width: 44px; height: 44px; background: var(--border); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; flex-shrink: 0; }
+    .ping-btn {
+      background: #3D2A10; color: var(--orange); border: none; padding: 8px 14px;
+      border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer;
+      font-family: 'Inter', sans-serif;
+    }
+    .ping-btn:hover { opacity: 0.8; }
+    .loader { text-align: center; padding: 40px; color: var(--muted); }
+
+    select {
+      width: 100%; padding: 14px 16px; background: var(--bg); border: 1.5px solid var(--border);
+      border-radius: 12px; color: var(--white); font-size: 14px; font-family: 'Inter', sans-serif;
+      outline: none;
+    }
+    select:focus { border-color: var(--green); }
+
+    @media (max-width: 480px) { .form-row { flex-direction: column; } }
+  </style>
+</head>
+<body>
+
+<!-- AUTH SCREEN -->
+<div id="auth-screen">
+  <div class="logo">Sub<span>Manager</span></div>
+  <p class="subtitle">Spotify Premium Group Dashboard</p>
+  <div class="auth-card">
+    <h2>Sign In</h2>
+    <div class="input-group">
+      <label>Email</label>
+      <input type="email" id="email-input" placeholder="your@email.com" />
+    </div>
+    <div class="input-group">
+      <label>Password</label>
+      <input type="password" id="password-input" placeholder="••••••••" />
+    </div>
+    <button class="btn" id="login-btn" onclick="login()">Sign In</button>
+    <p class="error-msg" id="auth-error"></p>
+  </div>
+</div>
+
+<!-- APP SCREEN -->
+<div id="app-screen">
+  <div class="topbar">
+    <div class="topbar-title">Sub<span>Manager</span></div>
+    <button class="logout-btn" onclick="logout()">Logout</button>
+  </div>
+  <div class="main" id="main-content">
+    <div class="loader">Loading...</div>
+  </div>
+</div>
+
+<script>
+  // ─── SUPABASE CONFIG ────────────────────────────────────────────────────────
+  const SUPABASE_URL = 'https://YOUR_SUPABASE_URL.supabase.co';
+  const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+  const { createClient } = supabase;
+  const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const MONTHLY_COST = 212;
+  const START_YEAR = 2026, START_MONTH = 5; // May 2026
+
+  function getDynamicMonthsUsed() {
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth() + 1;
+    const used = (y - START_YEAR) * 12 + (m - START_MONTH) + 1;
+    return Math.max(1, used);
+  }
+
+  function getStatus(remaining) {
+    const now = new Date();
+    const day = now.getDate();
+    const daysUntil8 = day <= 8 ? 8 - day : (new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - day) + 8;
+    if (remaining > 0) return { text: '✓ Active', cls: 'badge-active' };
+    if (remaining === 0 && daysUntil8 > 4) return { text: '✓ Active', cls: 'badge-active' };
+    if (remaining === 0 && daysUntil8 >= 1) return { text: `⏰ Due in ${daysUntil8} days`, cls: 'badge-warning' };
+    return { text: '⚠ Payment Due', cls: 'badge-due' };
+  }
+
+  function monthOptions() {
+    let opts = '';
+    const d = new Date(2026, 3, 1); // April 2026
+    for (let i = 0; i < 12; i++) {
+      const y = d.getFullYear(), m = d.getMonth();
+      const val = `${y}-${String(m + 1).padStart(2, '0')}`;
+      const label = d.toLocaleString('default', { month: 'long' }) + ' ' + y;
+      opts += `<option value="${val}">${label}</option>`;
+      d.setMonth(d.getMonth() + 1);
+    }
+    return opts;
+  }
+
+  // ─── AUTH ───────────────────────────────────────────────────────────────────
+  async function login() {
+    const email = document.getElementById('email-input').value.trim();
+    const pass = document.getElementById('password-input').value;
+    const btn = document.getElementById('login-btn');
+    const err = document.getElementById('auth-error');
+    btn.disabled = true; btn.textContent = 'Signing in...'; err.style.display = 'none';
+    const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+    if (error) {
+      err.textContent = error.message; err.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Sign In';
+    } else { await initApp(); }
+  }
+
+  async function logout() {
+    await sb.auth.signOut();
+    document.getElementById('app-screen').style.display = 'none';
+    document.getElementById('auth-screen').style.display = 'flex';
+  }
+
+  // ─── INIT ────────────────────────────────────────────────────────────────────
+  async function initApp() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return;
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('app-screen').style.display = 'block';
+
+    const { data: member } = await sb.from('members').select('*').eq('auth_id', user.id).single();
+    if (!member) { document.getElementById('main-content').innerHTML = '<p style="padding:20px;color:var(--muted)">Your account is not linked. Please use the Android app to claim your profile.</p>'; return; }
+
+    if (member.role === 'manager') await renderManager(member);
+    else await renderMember(member);
+  }
+
+  // ─── MEMBER VIEW ─────────────────────────────────────────────────────────────
+  async function renderMember(member) {
+    const { data: payments } = await sb.from('payments').select('*').eq('member_id', member.id).order('created_at', { ascending: false });
+    const { data: notifs } = await sb.from('notifications').select('*').eq('member_id', member.id).eq('is_read', false);
+    const monthsUsed = getDynamicMonthsUsed();
+    const total = (payments || []).reduce((s, p) => s + p.amount, 0);
+    const monthsPaid = Math.floor(total / 211);
+    const remaining = monthsPaid - monthsUsed;
+    const status = getStatus(remaining);
+
+    let pingHtml = '';
+    if (notifs && notifs.length > 0) {
+      pingHtml = `<div class="ping-banner">
+        <span>🔔</span>
+        <p><strong>Reminder from Admin</strong><br>${notifs[0].message}</p>
+        <button class="ping-close" onclick="dismissPing('${member.id}')">✕</button>
+      </div>`;
+    }
+
+    document.getElementById('main-content').innerHTML = `
+      ${pingHtml}
+      <p class="section-title">Hello, ${member.name.split(' ')[0]}! 👋</p>
+      <div class="card">
+        <div class="card-row">
+          <span class="card-label">Status</span>
+          <span class="status-badge ${status.cls}">${status.text}</span>
+        </div>
+        <div class="card-row"><span class="card-label">Total Paid</span><span class="card-value" style="color:var(--green)">Rs. ${total}</span></div>
+        <div class="card-row"><span class="card-label">Months Paid</span><span class="card-value">${monthsPaid}</span></div>
+        <div class="card-row"><span class="card-label">Months Used</span><span class="card-value">${monthsUsed}</span></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100,(monthsUsed/Math.max(1,monthsPaid))*100)}%;background:${remaining<=0?'var(--red)':'var(--green)'}"></div></div>
+        <div style="display:flex;justify-content:space-between">
+          <span style="font-size:11px;color:var(--muted)">Months Left</span>
+          <span style="font-size:11px;font-weight:600;color:${remaining<=0?'var(--red)':'var(--green)'}">${remaining}</span>
+        </div>
+      </div>
+
+      <div class="payment-form">
+        <h3>Add Payment</h3>
+        <div class="form-row">
+          <div class="input-group"><label>Amount (Rs.)</label><input type="number" id="amt" placeholder="212" /></div>
+          <div class="input-group"><label>Date</label><input type="date" id="pdate" value="${new Date().toISOString().split('T')[0]}" /></div>
+        </div>
+        <div class="input-group"><label>For Month</label><select id="pmonth">${monthOptions()}</select></div>
+        <div id="extra-hint" style="color:var(--green);font-size:12px;margin-top:8px;display:none"></div>
+        <div class="form-submit"><button class="btn" onclick="addPayment('${member.id}')">Submit Payment</button></div>
+      </div>
+
+      <p class="section-title">Transaction History</p>
+      <div class="card" id="tx-list">
+        ${(payments || []).length === 0 ? '<p style="color:var(--muted);text-align:center;padding:20px">No payments yet.</p>' :
+          (payments || []).map(p => `
+          <div class="transaction">
+            <div class="tx-icon">💳</div>
+            <div class="tx-info">
+              <div class="tx-month">Payment for ${p.payment_for_month || 'Unknown'}</div>
+              <div class="tx-date">${p.payment_date || p.created_at?.split('T')[0] || '-'}</div>
+            </div>
+            <div class="tx-amount">Rs. ${p.amount}</div>
+          </div>`).join('')}
+      </div>`;
+
+    document.getElementById('amt').addEventListener('input', function() {
+      const v = parseFloat(this.value);
+      const hint = document.getElementById('extra-hint');
+      if (v > MONTHLY_COST) { const m = Math.floor(v / MONTHLY_COST); hint.textContent = `💡 Rs. ${v} covers ${m} month(s)`; hint.style.display = 'block'; }
+      else hint.style.display = 'none';
+    });
+  }
+
+  // ─── MANAGER VIEW ─────────────────────────────────────────────────────────────
+  async function renderManager() {
+    const { data: members } = await sb.from('members').select('*');
+    const monthsUsed = getDynamicMonthsUsed();
+
+    const memberCards = await Promise.all((members || []).map(async m => {
+      const { data: payments } = await sb.from('payments').select('*').eq('member_id', m.id);
+      const total = (payments || []).reduce((s, p) => s + p.amount, 0);
+      const monthsPaid = Math.floor(total / 211);
+      const remaining = monthsPaid - monthsUsed;
+      const status = getStatus(remaining);
+      const progress = Math.min(100, (monthsUsed / Math.max(1, monthsPaid)) * 100);
+      return `
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+            <div class="avatar">${m.name[0]}</div>
+            <div style="flex:1">
+              <div class="member-card-name">${m.name}</div>
+              <div class="member-card-sub">${payments?.length || 0} payments · Rs. ${total}</div>
+            </div>
+            <span class="status-badge ${status.cls}">${status.text}</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${progress}%;background:${remaining<=0?'var(--red)':'var(--green)'}"></div></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:14px">
+            <span style="font-size:11px;color:var(--muted)">Paid: ${monthsPaid} mo</span>
+            <span style="font-size:11px;color:var(--muted)">Used: ${monthsUsed} mo</span>
+            <span style="font-size:11px;font-weight:600;color:${remaining<=0?'var(--red)':'var(--green)'}">Left: ${remaining} mo</span>
+          </div>
+          <div style="display:flex;gap:10px">
+            <button class="btn" style="flex:1;padding:10px" onclick="openMemberDetail('${m.id}','${m.name}')">Details</button>
+            <button class="ping-btn" onclick="pingMember('${m.id}','${m.name}')">🔔 Ping</button>
+          </div>
+        </div>`;
+    }));
+
+    document.getElementById('main-content').innerHTML = `<p class="section-title">All Members</p>${memberCards.join('')}`;
+  }
+
+  // ─── ACTIONS ─────────────────────────────────────────────────────────────────
+  async function addPayment(memberId) {
+    const amount = parseFloat(document.getElementById('amt').value);
+    const date = document.getElementById('pdate').value;
+    const month = document.getElementById('pmonth').value;
+    if (!amount || amount <= 0) return alert('Enter a valid amount');
+    await sb.from('payments').insert({ member_id: memberId, amount, payment_date: date, payment_for_month: month });
+    await initApp();
+  }
+
+  async function pingMember(memberId, name) {
+    await sb.from('notifications').insert({ member_id: memberId, message: 'Reminder: Your Spotify payment of Rs. 212 is due on the 8th!' });
+    alert(`✅ Pinged ${name}!`);
+  }
+
+  async function dismissPing(memberId) {
+    await sb.from('notifications').update({ is_read: true }).eq('member_id', memberId);
+    await initApp();
+  }
+
+  async function openMemberDetail(memberId, name) {
+    const { data: payments } = await sb.from('payments').select('*').eq('member_id', memberId).order('created_at', { ascending: false });
+    const total = (payments || []).reduce((s, p) => s + p.amount, 0);
+    const monthsUsed = getDynamicMonthsUsed();
+    const monthsPaid = Math.floor(total / 211);
+    const remaining = monthsPaid - monthsUsed;
+
+    document.getElementById('main-content').innerHTML = `
+      <button onclick="initApp()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:14px;margin-top:16px">← Back</button>
+      <p class="section-title">${name}</p>
+      <div class="card">
+        <div class="card-row"><span class="card-label">Total Paid</span><span style="color:var(--green);font-weight:600">Rs. ${total}</span></div>
+        <div class="card-row"><span class="card-label">Months Paid</span><span>${monthsPaid}</span></div>
+        <div class="card-row"><span class="card-label">Remaining</span><span style="color:${remaining<=0?'var(--red)':'var(--green)'}">${remaining}</span></div>
+      </div>
+      <div class="payment-form">
+        <h3>Add Payment</h3>
+        <div class="form-row">
+          <div class="input-group"><label>Amount</label><input type="number" id="amt" placeholder="212" /></div>
+          <div class="input-group"><label>Date</label><input type="date" id="pdate" value="${new Date().toISOString().split('T')[0]}" /></div>
+        </div>
+        <div class="input-group"><label>For Month</label><select id="pmonth">${monthOptions()}</select></div>
+        <div class="form-submit"><button class="btn" onclick="addPaymentManager('${memberId}')">Submit</button></div>
+      </div>
+      <p class="section-title">Transactions</p>
+      <div class="card">
+        ${(payments || []).map(p => `
+        <div class="transaction">
+          <div class="tx-icon">💳</div>
+          <div class="tx-info"><div class="tx-month">${p.payment_for_month || 'Unknown'}</div><div class="tx-date">${p.payment_date || '-'}</div></div>
+          <div class="tx-amount">Rs. ${p.amount}</div>
+          <button onclick="deletePayment('${p.id}','${memberId}','${name}')" style="background:transparent;border:none;color:var(--red);cursor:pointer;font-size:18px">🗑</button>
+        </div>`).join('') || '<p style="color:var(--muted);text-align:center;padding:20px">No payments.</p>'}
+      </div>`;
+  }
+
+  async function addPaymentManager(memberId) {
+    const amount = parseFloat(document.getElementById('amt').value);
+    const date = document.getElementById('pdate').value;
+    const month = document.getElementById('pmonth').value;
+    if (!amount || amount <= 0) return alert('Enter a valid amount');
+    await sb.from('payments').insert({ member_id: memberId, amount, payment_date: date, payment_for_month: month });
+    const { data: m } = await sb.from('members').select('name').eq('id', memberId).single();
+    await openMemberDetail(memberId, m.name);
+  }
+
+  async function deletePayment(paymentId, memberId, memberName) {
+    if (!confirm('Delete this payment?')) return;
+    await sb.from('payments').delete().eq('id', paymentId);
+    await openMemberDetail(memberId, memberName);
+  }
+
+  // ─── STARTUP ──────────────────────────────────────────────────────────────────
+  sb.auth.onAuthStateChange((event, session) => {
+    if (session) initApp();
+  });
+
+  (async () => {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) initApp();
+  })();
+</script>
+</body>
+</html>
