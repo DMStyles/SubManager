@@ -276,6 +276,38 @@ class SubscriptionViewModel : ViewModel() {
         }
     }
 
+    private val _updateAvailable = MutableStateFlow(false)
+    val updateAvailable: StateFlow<Boolean> = _updateAvailable
+
+    private val _latestUpdateUrl = MutableStateFlow<String?>(null)
+    val latestUpdateUrl: StateFlow<String?> = _latestUpdateUrl
+
+    fun checkForUpdates(currentVersion: String) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val url = java.net.URL("https://raw.githubusercontent.com/DMStyles/SubManager/master/version.json")
+                val connection = url.openConnection() as java.net.HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.connect()
+                
+                if (connection.responseCode == 200) {
+                    val stream = connection.inputStream
+                    val response = stream.bufferedReader().use { it.readText() }
+                    val json = org.json.JSONObject(response)
+                    val latestVersion = json.getString("versionName")
+                    val downloadUrl = json.getString("downloadUrl")
+                    
+                    if (latestVersion != currentVersion) {
+                        _updateAvailable.value = true
+                        _latestUpdateUrl.value = downloadUrl
+                    }
+                }
+            } catch (e: Exception) {
+                // Ignore update check failures
+            }
+        }
+    }
+
     fun clearPingSuccess() { _pingSuccess.value = null }
     fun clearError() { _errorMessage.value = null }
 }

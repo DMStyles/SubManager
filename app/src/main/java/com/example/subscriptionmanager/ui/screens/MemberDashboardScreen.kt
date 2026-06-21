@@ -369,12 +369,18 @@ fun AppSettingsTab(onLogout: () -> Unit, viewModel: SubscriptionViewModel? = nul
     val sharedPrefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
     var notificationsEnabled by remember { mutableStateOf(sharedPrefs.getBoolean("notifications_enabled", true)) }
     var daysBefore by remember { mutableFloatStateOf(sharedPrefs.getInt("days_before_reminder", 4).toFloat()) }
-    val updateAvailable by remember { mutableStateOf(false) } // updated by ViewModel
+    
+    val updateAvailableState = viewModel?.updateAvailable?.collectAsStateWithLifecycle()
+    val updateAvailable = updateAvailableState?.value ?: false
 
     val packageInfo = remember {
         try { context.packageManager.getPackageInfo(context.packageName, 0) } catch (e: Exception) { null }
     }
-    val versionName = packageInfo?.versionName ?: "1.2"
+    val versionName = packageInfo?.versionName ?: "1.3"
+
+    LaunchedEffect(Unit) {
+        viewModel?.checkForUpdates(versionName)
+    }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
         Spacer(Modifier.height(32.dp))
@@ -431,8 +437,6 @@ fun AppSettingsTab(onLogout: () -> Unit, viewModel: SubscriptionViewModel? = nul
             }
         }
 
-        Spacer(Modifier.height(16.dp))
-
         // Check for Updates Card
         Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = CardBg), shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(20.dp)) {
@@ -445,7 +449,13 @@ fun AppSettingsTab(onLogout: () -> Unit, viewModel: SubscriptionViewModel? = nul
                     }
                     if (updateAvailable) {
                         Button(
-                            onClick = { /* open download link */ },
+                            onClick = { 
+                                val url = viewModel?.latestUpdateUrl?.value
+                                if (url != null) {
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                                    context.startActivity(intent)
+                                }
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = AccentGreen),
                             shape = RoundedCornerShape(10.dp)
                         ) { Text("Update Available!", fontSize = 12.sp) }
