@@ -13,3 +13,6 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Firebase - never commit this to a public repo!
+app/google-services.json
