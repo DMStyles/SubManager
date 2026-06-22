@@ -438,6 +438,9 @@ fun AppSettingsTab(onLogout: () -> Unit, viewModel: SubscriptionViewModel? = nul
         }
 
         // Check for Updates Card
+        var isCheckingUpdate by remember { mutableStateOf(false) }
+        var checkResult by remember { mutableStateOf<String?>(null) }
+
         Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = CardBg), shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(20.dp)) {
                 Text("Updates", fontWeight = FontWeight.SemiBold, color = TextWhite, fontSize = 16.sp)
@@ -449,7 +452,7 @@ fun AppSettingsTab(onLogout: () -> Unit, viewModel: SubscriptionViewModel? = nul
                     }
                     if (updateAvailable) {
                         Button(
-                            onClick = { 
+                            onClick = {
                                 val url = viewModel?.latestUpdateUrl?.value
                                 if (url != null) {
                                     val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
@@ -464,6 +467,38 @@ fun AppSettingsTab(onLogout: () -> Unit, viewModel: SubscriptionViewModel? = nul
                             Text("Up to date ✓", color = AccentGreen, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
+                }
+                Spacer(Modifier.height(14.dp))
+                // Manual check button
+                OutlinedButton(
+                    onClick = {
+                        if (!isCheckingUpdate) {
+                            isCheckingUpdate = true
+                            checkResult = null
+                            viewModel?.checkForUpdates(versionName) { hasUpdate ->
+                                isCheckingUpdate = false
+                                checkResult = if (hasUpdate) "Update found! Tap above to download." else "You're on the latest version!"
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextWhite),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3A4A5A))
+                ) {
+                    if (isCheckingUpdate) {
+                        androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(16.dp), color = AccentGreen, strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Checking...", fontSize = 13.sp)
+                    } else {
+                        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Check for Updates", fontSize = 13.sp)
+                    }
+                }
+                if (checkResult != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(checkResult!!, color = AccentGreen, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
             }
         }

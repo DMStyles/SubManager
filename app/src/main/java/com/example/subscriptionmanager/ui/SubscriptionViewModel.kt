@@ -294,7 +294,7 @@ class SubscriptionViewModel : ViewModel() {
     private val _latestUpdateUrl = MutableStateFlow<String?>(null)
     val latestUpdateUrl: StateFlow<String?> = _latestUpdateUrl
 
-    fun checkForUpdates(currentVersion: String) {
+    fun checkForUpdates(currentVersion: String, onResult: ((Boolean) -> Unit)? = null) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val url = java.net.URL("https://raw.githubusercontent.com/DMStyles/SubManager/master/version.json")
@@ -312,10 +312,15 @@ class SubscriptionViewModel : ViewModel() {
                     if (latestVersion != currentVersion) {
                         _updateAvailable.value = true
                         _latestUpdateUrl.value = downloadUrl
+                        onResult?.invoke(true)
+                    } else {
+                        onResult?.invoke(false)
                     }
+                } else {
+                    onResult?.invoke(false)
                 }
             } catch (e: Exception) {
-                // Ignore update check failures
+                onResult?.invoke(false)
             }
         }
     }
