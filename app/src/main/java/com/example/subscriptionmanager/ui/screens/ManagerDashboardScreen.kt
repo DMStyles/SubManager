@@ -3,11 +3,14 @@ package com.example.subscriptionmanager.ui.screens
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -74,50 +77,268 @@ fun ManagerDashboardScreen(viewModel: SubscriptionViewModel, onLogout: () -> Uni
 @Composable
 fun ManagerOverviewTab(members: List<MemberState>) {
     val totalRevenue = members.flatMap { it.payments }.sumOf { it.amount }
-    val activeMembers = members.count { it.status == "ACTIVE" }
-    val dueMembers = members.count { it.status == "PAYMENT DUE" }
+    val activeCount = members.count { it.status == "ACTIVE" }
+    val dueCount = members.count { it.status != "ACTIVE" }
+    val totalMembers = members.size
+    val collectionRate = if (totalMembers > 0) (activeCount.toFloat() / totalMembers.toFloat()) else 0f
+    val animatedRate by animateFloatAsState(collectionRate, tween(1000), label = "rate")
+
+    // Build monthly data: for each month since May 2026, figure out who paid
+    val months = remember {
+        val list = mutableListOf<Triple<String, String, String>>() // label, yearMonth, displayMonth
+        val cal = java.util.Calendar.getInstance()
+        val startYear = 2026; val startMonth = 4 // May = month index 4 (0-based)
+        val curYear = cal.get(java.util.Calendar.YEAR)
+        val curMonth = cal.get(java.util.Calendar.MONTH)
+        var y = startYear; var m = startMonth
+        while (y < curYear || (y == curYear && m <= curMonth)) {
+            val monthName = java.text.SimpleDateFormat("MMMM yyyy", java.util.Locale.getDefault())
+                .format(java.util.Calendar.getInstance().apply { set(y, m, 1) }.time)
+            val key = "$y-${String.format("%02d", m + 1)}"
+            list.add(Triple(monthName, key, key))
+            if (m == 11) { m = 0; y++ } else m++
+        }
+        list.reversed() // newest first
+    }
+
+    var selectedMonth by remember { mutableStateOf<Triple<String, String, String>?>(null) }
+
+    // Who paid for a given month key
+    fun paidForMonth(yearMonth: String): List<MemberState> {
+        return members.filter { member ->
+            member.payments.any { it.payment_for_month == yearMonth }
+        }
+    }
+
+    // Monthly breakdown bottom sheet
+    if (selectedMonth != null) {
+        val paid = paidForMonth(selectedMonth!!.second)
+        val unpaid = members.filter { m -> paid.none { it.id == m.id } }
+        val monthRevenue = paid.sumOf { member ->
+            member.payments.filter { it.payment_for_month == selectedMonth!!.second }.sumOf { it.amount }
+        }
+        Dialog(onDismissRequest = { selectedMonth = null }) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF141E30)),
+                shape = RoundedCornerShape(24.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(24.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier.size(42.dp).clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF1A2E20)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Filled.DateRange, null, tint = AccentGreen, modifier = Modifier.size(22.dp))
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text(selectedMonth!!.first, fontWeight = FontWeight.Bold, color = TextWhite, fontSize = 17.sp)
+                            Text("Rs. ${monthRevenue.toInt()} collected", color = AccentGreen, fontSize = 12.sp)
+                        }
+                        Spacer(Modifier.weight(1f))
+                        IconButton(onClick = { selectedMonth = null }) {
+                            Icon(Icons.Filled.Close, null, tint = TextMuted)
+                        }
+                    }
+
+                    Spacer(Modifier.height(20.dp))
+
+                    if (paid.isNotEmpty()) {
+                        Text("✓  Paid (${paid.size})", color = AccentGreen, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Spacer(Modifier.height(10.dp))
+                        paid.forEach { m ->
+                            val amt = m.payments.filter { it.payment_for_month == selectedMonth!!.second }.sumOf { it.amount }
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    Modifier.size(34.dp).clip(CircleShape).background(Color(0xFF1A2E20)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(m.name.first().toString(), color = AccentGreen, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                }
+                                Spacer(Modifier.width(10.dp))
+                                Text(m.name, color = TextWhite, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                                Text("Rs. ${amt.toInt()}", color = AccentGreen, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+
+                    if (unpaid.isNotEmpty()) {
+                        Spacer(Modifier.height(16.dp))
+                        Divider(color = Color(0xFF2D3A55))
+                        Spacer(Modifier.height(16.dp))
+                        Text("✗  Not Paid (${unpaid.size})", color = AccentRed, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Spacer(Modifier.height(10.dp))
+                        unpaid.forEach { m ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    Modifier.size(34.dp).clip(CircleShape).background(Color(0xFF3D1A1A)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(m.name.first().toString(), color = AccentRed, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                }
+                                Spacer(Modifier.width(10.dp))
+                                Text(m.name, color = TextWhite, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                                Text("Not paid", color = AccentRed, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item { Spacer(Modifier.height(24.dp)) }
-        item {
-            Text("Admin Dashboard", fontWeight = FontWeight.Bold, color = TextWhite, fontSize = 26.sp)
-            Text("Here's your Spotify group's overview", color = TextMuted, fontSize = 14.sp)
-        }
-        item { Spacer(Modifier.height(8.dp)) }
 
+        // Header
         item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Admin Dashboard", fontWeight = FontWeight.Bold, color = TextWhite, fontSize = 26.sp)
+                    Text("Spotify Premium · 6 members", color = TextMuted, fontSize = 13.sp)
+                }
+                Box(
+                    Modifier.size(44.dp).clip(CircleShape)
+                        .background(Brush.linearGradient(listOf(AccentGreen, Color(0xFF00BCD4)))),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("A", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 18.sp)
+                }
+            }
+        }
+
+        // Hero Revenue Card
+        item {
+            Box(
+                modifier = Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Brush.linearGradient(listOf(Color(0xFF1A3A2A), Color(0xFF0D2040))))
+            ) {
+                Column(Modifier.padding(24.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Total Revenue", color = TextMuted, fontSize = 13.sp)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text("Rs. ${totalRevenue.toInt()}", fontWeight = FontWeight.Bold, color = AccentGreen, fontSize = 40.sp)
+                    Spacer(Modifier.height(16.dp))
+                    // Collection rate bar
+                    Text("Collection Rate · ${(collectionRate * 100).toInt()}%", color = TextMuted, fontSize = 12.sp)
+                    Spacer(Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { animatedRate },
+                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)),
+                        color = AccentGreen,
+                        trackColor = Color(0xFF2D3A55),
+                        strokeCap = StrokeCap.Round
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        StatChip(label = "Active", value = "$activeCount", color = AccentGreen, modifier = Modifier.weight(1f))
+                        StatChip(label = "Due", value = "$dueCount", color = AccentRed, modifier = Modifier.weight(1f))
+                        StatChip(label = "Members", value = "$totalMembers", color = Color(0xFF64B5F6), modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+
+        // Monthly History
+        item {
+            Text("Monthly History", fontWeight = FontWeight.Bold, color = TextWhite, fontSize = 18.sp)
+            Text("Tap any month to see who paid", color = TextMuted, fontSize = 12.sp)
+        }
+
+        items(months) { (label, key, _) ->
+            val paidList = paidForMonth(key)
+            val unpaidList = members.filter { m -> paidList.none { it.id == m.id } }
+            val monthAmt = paidList.sumOf { member ->
+                member.payments.filter { it.payment_for_month == key }.sumOf { it.amount }
+            }
+            val isComplete = unpaidList.isEmpty() && members.isNotEmpty()
+
             Card(
+                onClick = { selectedMonth = Triple(label, key, key) },
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = CardBg),
-                shape = RoundedCornerShape(20.dp),
-                elevation = CardDefaults.cardElevation(8.dp)
+                shape = RoundedCornerShape(18.dp),
+                elevation = CardDefaults.cardElevation(4.dp)
             ) {
-                Column(Modifier.padding(22.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Total Revenue", color = TextMuted, fontSize = 14.sp)
-                    Spacer(Modifier.height(4.dp))
-                    Text("Rs. ${totalRevenue.toInt()}", fontWeight = FontWeight.Bold, color = AccentGreen, fontSize = 34.sp)
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // Month icon
+                    Box(
+                        Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))
+                            .background(if (isComplete) Color(0xFF1A2E20) else Color(0xFF2D1A1A)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            if (isComplete) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                            null,
+                            tint = if (isComplete) AccentGreen else AccentRed,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(label, fontWeight = FontWeight.SemiBold, color = TextWhite, fontSize = 14.sp)
+                        Spacer(Modifier.height(4.dp))
+                        // Avatar row of paid members
+                        Row(horizontalArrangement = Arrangement.spacedBy((-8).dp)) {
+                            paidList.take(5).forEach { m ->
+                                Box(
+                                    Modifier.size(22.dp).clip(CircleShape)
+                                        .background(AccentGreen.copy(alpha = 0.3f))
+                                        .border(1.dp, AccentGreen, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(m.name.first().toString(), color = AccentGreen, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            if (paidList.size > 5) {
+                                Box(
+                                    Modifier.size(22.dp).clip(CircleShape).background(Color(0xFF2D3A55)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("+${paidList.size - 5}", color = TextMuted, fontSize = 8.sp)
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text("${paidList.size}/${members.size} paid", color = TextMuted, fontSize = 11.sp)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("Rs. ${monthAmt.toInt()}", fontWeight = FontWeight.Bold, color = if (isComplete) AccentGreen else TextWhite, fontSize = 14.sp)
+                        Spacer(Modifier.height(4.dp))
+                        Icon(Icons.Filled.KeyboardArrowRight, null, tint = TextMuted, modifier = Modifier.size(18.dp))
+                    }
                 }
             }
         }
 
-        item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Card(modifier = Modifier.weight(1f).aspectRatio(1f), colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2E20)), shape = RoundedCornerShape(20.dp)) {
-                    Column(Modifier.padding(20.dp).fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("$activeMembers", fontWeight = FontWeight.Bold, color = AccentGreen, fontSize = 36.sp)
-                        Text("Active", color = TextWhite, fontSize = 14.sp)
-                    }
-                }
-                Card(modifier = Modifier.weight(1f).aspectRatio(1f), colors = CardDefaults.cardColors(containerColor = Color(0xFF3D1A1A)), shape = RoundedCornerShape(20.dp)) {
-                    Column(Modifier.padding(20.dp).fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("$dueMembers", fontWeight = FontWeight.Bold, color = AccentRed, fontSize = 36.sp)
-                        Text("Due", color = TextWhite, fontSize = 14.sp)
-                    }
-                }
-            }
+        item { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
+@Composable
+fun StatChip(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = 0.12f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(Modifier.padding(vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(value, fontWeight = FontWeight.Bold, color = color, fontSize = 20.sp)
+            Text(label, color = color.copy(alpha = 0.7f), fontSize = 11.sp)
         }
     }
 }
