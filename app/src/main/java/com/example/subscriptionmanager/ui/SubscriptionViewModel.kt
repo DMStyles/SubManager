@@ -319,6 +319,8 @@ class SubscriptionViewModel : ViewModel() {
                 val url = java.net.URL("https://raw.githubusercontent.com/DMStyles/SubManager/master/version.json")
                 val connection = url.openConnection() as java.net.HttpURLConnection
                 connection.requestMethod = "GET"
+                connection.connectTimeout = 5000
+                connection.readTimeout = 5000
                 connection.connect()
                 
                 if (connection.responseCode == 200) {
@@ -328,18 +330,20 @@ class SubscriptionViewModel : ViewModel() {
                     val latestVersion = json.getString("versionName")
                     val downloadUrl = json.getString("downloadUrl")
                     
-                    if (latestVersion != currentVersion) {
-                        _updateAvailable.value = true
-                        _latestUpdateUrl.value = downloadUrl
-                        onResult?.invoke(true)
-                    } else {
-                        onResult?.invoke(false)
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        if (latestVersion != currentVersion) {
+                            _updateAvailable.value = true
+                            _latestUpdateUrl.value = downloadUrl
+                            onResult?.invoke(true)
+                        } else {
+                            onResult?.invoke(false)
+                        }
                     }
                 } else {
-                    onResult?.invoke(false)
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { onResult?.invoke(false) }
                 }
             } catch (e: Exception) {
-                onResult?.invoke(false)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { onResult?.invoke(false) }
             }
         }
     }
