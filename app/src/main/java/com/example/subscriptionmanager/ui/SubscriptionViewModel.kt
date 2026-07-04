@@ -178,7 +178,26 @@ class SubscriptionViewModel : ViewModel() {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                repository.addPayment(memberId, amount, paymentDate, paymentForMonth)
+                val monthsCount = (amount / 211.0).toInt().coerceAtLeast(1)
+                val parts = paymentForMonth.split("-")
+                
+                if (monthsCount > 1 && parts.size == 2) {
+                    var year = parts[0].toIntOrNull() ?: 2026
+                    var month = parts[1].toIntOrNull() ?: 6
+                    val amountPerMonth = amount / monthsCount
+                    
+                    for (i in 0 until monthsCount) {
+                        val currentMonthStr = "$year-${String.format("%02d", month)}"
+                        repository.addPayment(memberId, amountPerMonth, paymentDate, currentMonthStr)
+                        month++
+                        if (month > 12) {
+                            month = 1
+                            year++
+                        }
+                    }
+                } else {
+                    repository.addPayment(memberId, amount, paymentDate, paymentForMonth)
+                }
                 loadData()
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to add payment."

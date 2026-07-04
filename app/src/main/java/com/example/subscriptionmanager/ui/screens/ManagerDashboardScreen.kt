@@ -78,7 +78,8 @@ fun ManagerDashboardScreen(viewModel: SubscriptionViewModel, onLogout: () -> Uni
 fun ManagerOverviewTab(members: List<MemberState>) {
     val totalRevenue = members.flatMap { it.payments }.sumOf { it.amount }
     val activeCount = members.count { it.status == "ACTIVE" }
-    val dueCount = members.count { it.status != "ACTIVE" }
+    val upcomingCount = members.count { it.status.startsWith("DUE IN") || it.status == "PAYMENT DUE TODAY" }
+    val lateCount = members.count { it.status == "PAYMENT DUE" }
     val totalMembers = members.size
     val collectionRate = if (totalMembers > 0) (activeCount.toFloat() / totalMembers.toFloat()) else 0f
     val animatedRate by animateFloatAsState(collectionRate, tween(1000), label = "rate")
@@ -206,7 +207,7 @@ fun ManagerOverviewTab(members: List<MemberState>) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Admin Dashboard", fontWeight = FontWeight.Bold, color = TextWhite, fontSize = 26.sp)
-                    Text("Spotify Premium · 6 members", color = TextMuted, fontSize = 13.sp)
+                    Text("Spotify Premium · $totalMembers members", color = TextMuted, fontSize = 13.sp)
                 }
                 Box(
                     Modifier.size(44.dp).clip(CircleShape)
@@ -246,9 +247,9 @@ fun ManagerOverviewTab(members: List<MemberState>) {
                     )
                     Spacer(Modifier.height(16.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        StatChip(label = "Active", value = "$activeCount", color = AccentGreen, modifier = Modifier.weight(1f))
-                        StatChip(label = "Due", value = "$dueCount", color = AccentRed, modifier = Modifier.weight(1f))
-                        StatChip(label = "Members", value = "$totalMembers", color = Color(0xFF64B5F6), modifier = Modifier.weight(1f))
+                        StatChip(label = "Paid", value = "$activeCount", color = AccentGreen, modifier = Modifier.weight(1f))
+                        StatChip(label = "Upcoming", value = "$upcomingCount", color = Color(0xFFFFC107), modifier = Modifier.weight(1f))
+                        StatChip(label = "Late", value = "$lateCount", color = AccentRed, modifier = Modifier.weight(1f))
                     }
                 }
             }

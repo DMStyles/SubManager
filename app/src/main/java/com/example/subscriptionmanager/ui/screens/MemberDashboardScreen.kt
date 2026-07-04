@@ -544,7 +544,7 @@ fun StatusBadge(status: String) {
     val (bgColor, textColor, label) = when {
         status == "ACTIVE"             -> Triple(Color(0xFF1A2E20), AccentGreen, "✓ Active")
         status == "PAYMENT DUE"        -> Triple(Color(0xFF3D1A1A), AccentRed, "⚠ Payment Due")
-        status == "PAYMENT DUE TODAY"  -> Triple(Color(0xFF3D1A1A), AccentRed, "🔴 Due Today")
+        status == "PAYMENT DUE TODAY"  -> Triple(Color(0xFF3D2A10), Color(0xFFFFA726), "⏰ Due Today")
         status.startsWith("DUE IN")    -> Triple(Color(0xFF3D2A10), Color(0xFFFFA726), "⏰ $status")
         else                           -> Triple(Color(0xFF1A2E20), AccentGreen, "✓ Active")
     }
