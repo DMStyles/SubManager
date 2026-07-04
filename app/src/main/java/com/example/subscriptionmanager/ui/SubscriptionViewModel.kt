@@ -145,10 +145,11 @@ class SubscriptionViewModel : ViewModel() {
                     }
 
                     val status = when {
-                        remainingBalance > 0 -> "ACTIVE" // paid ahead
-                        remainingBalance == 0 && daysUntilPaymentDay > 4 -> "ACTIVE" // paid this month, payment not close
-                        remainingBalance == 0 && daysUntilPaymentDay in 1..4 -> "DUE IN $daysUntilPaymentDay DAYS"
-                        remainingBalance == 0 && daysUntilPaymentDay == 0 -> "PAYMENT DUE TODAY"
+                        remainingBalance >= 0 -> "ACTIVE" // paid up or ahead
+                        remainingBalance == -1 && today <= 8 -> {
+                            val daysLeft = 8 - today
+                            if (daysLeft == 0) "PAYMENT DUE TODAY" else "DUE IN $daysLeft DAYS"
+                        }
                         else -> "PAYMENT DUE" // overdue
                     }
 

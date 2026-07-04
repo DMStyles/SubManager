@@ -104,10 +104,19 @@ fun ManagerOverviewTab(members: List<MemberState>) {
 
     var selectedMonth by remember { mutableStateOf<Triple<String, String, String>?>(null) }
 
+    fun monthIndex(yearMonth: String): Int {
+        val parts = yearMonth.split("-")
+        if (parts.size != 2) return 1
+        val year = parts[0].toIntOrNull() ?: 2026
+        val month = parts[1].toIntOrNull() ?: 5
+        return (year - 2026) * 12 + (month - 5) + 1
+    }
+
     // Who paid for a given month key
     fun paidForMonth(yearMonth: String): List<MemberState> {
+        val targetIdx = monthIndex(yearMonth)
         return members.filter { member ->
-            member.payments.any { it.payment_for_month == yearMonth }
+            member.totalMonthsPaid >= targetIdx
         }
     }
 
@@ -116,7 +125,8 @@ fun ManagerOverviewTab(members: List<MemberState>) {
         val paid = paidForMonth(selectedMonth!!.second)
         val unpaid = members.filter { m -> paid.none { it.id == m.id } }
         val monthRevenue = paid.sumOf { member ->
-            member.payments.filter { it.payment_for_month == selectedMonth!!.second }.sumOf { it.amount }
+            val direct = member.payments.filter { it.payment_for_month == selectedMonth!!.second }.sumOf { it.amount }
+            if (direct > 0) direct else 212.0
         }
         Dialog(onDismissRequest = { selectedMonth = null }) {
             Card(
@@ -150,7 +160,8 @@ fun ManagerOverviewTab(members: List<MemberState>) {
                         Text("✓  Paid (${paid.size})", color = AccentGreen, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                         Spacer(Modifier.height(10.dp))
                         paid.forEach { m ->
-                            val amt = m.payments.filter { it.payment_for_month == selectedMonth!!.second }.sumOf { it.amount }
+                            val directAmt = m.payments.filter { it.payment_for_month == selectedMonth!!.second }.sumOf { it.amount }
+                            val amt = if (directAmt > 0) directAmt else 212.0
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -265,7 +276,8 @@ fun ManagerOverviewTab(members: List<MemberState>) {
             val paidList = paidForMonth(key)
             val unpaidList = members.filter { m -> paidList.none { it.id == m.id } }
             val monthAmt = paidList.sumOf { member ->
-                member.payments.filter { it.payment_for_month == key }.sumOf { it.amount }
+                val d = member.payments.filter { it.payment_for_month == key }.sumOf { it.amount }
+                if (d > 0) d else 212.0
             }
             val isComplete = unpaidList.isEmpty() && members.isNotEmpty()
 
