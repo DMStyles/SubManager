@@ -51,11 +51,13 @@ async function runReminders() {
   const daysUntilPayment = getDaysUntilPayment();
   const MONTHLY_COST = 211.0;
 
-  // We only want to spam push notifications if we are close to the 8th!
-  // e.g. 1 to 4 days before, or on the day of (0 days), or if it's way overdue but maybe only send once a week?
-  // Let's just send it if daysUntilPayment <= 4
-  if (daysUntilPayment > 4 && daysUntilPayment < 25) {
-    console.log(`It's not close to the 8th (Days until: ${daysUntilPayment}). Skipping notifications.`);
+  const now = new Date();
+  const day = now.getDate();
+
+  // Run on specific days to avoid spamming every single day
+  const allowedDays = [4, 6, 7, 8, 9, 12, 15, 18, 21, 25];
+  if (!allowedDays.includes(day)) {
+    console.log(`Today is the ${day}th. Not a scheduled notification day. Skipping.`);
     return;
   }
 
@@ -79,47 +81,58 @@ async function runReminders() {
     const totalMonthsPaid = Math.floor(totalPaid / MONTHLY_COST);
     const remainingBalance = totalMonthsPaid - dynamicMonthsUsed;
 
-    if (remainingBalance <= 0) {
-      console.log(`Member ${member.name} is due (Balance: ${remainingBalance}).`);
+    if (remainingBalance >= 0) {
+      console.log(`Member ${member.name} is paid up (Balance: +${remainingBalance}).`);
+      continue;
+    }
 
-      let messageTitle = "Spotify Payment Due";
-      let messageBody = `Reminder: Your Spotify payment of Rs. 212 is due on the 8th!`;
+    let messageTitle = "";
+    let messageBody = "";
 
-      if (daysUntilPayment === 0) {
-        messageBody = `Heads up! Your Spotify payment is due TODAY.`;
-      } else if (remainingBalance < 0) {
-        messageBody = `Your Spotify payment is OVERDUE! Please pay Rs. 212 ASAP.`;
-      }
-
-      // Add to in-app notifications
-      await supabase.from('notifications').insert({
-        member_id: member.id,
-        message: messageBody,
-        is_read: false
-      });
-      console.log(`- Created in-app notification for ${member.name}`);
-
-      // Send Push Notification if FCM token exists
-      if (member.fcm_token) {
-        const payload = {
-          notification: {
-            title: messageTitle,
-            body: messageBody
-          },
-          token: member.fcm_token
-        };
-
-        try {
-          const response = await admin.messaging().send(payload);
-          console.log(`- Sent push notification to ${member.name}: ${response}`);
-        } catch (error) {
-          console.error(`- Error sending push to ${member.name}:`, error);
+    if (remainingBalance === -1 && day <= 8) {
+        // Grace period (Upcoming / Due Today)
+        const daysLeft = 8 - day;
+        if (daysLeft === 0) {
+             messageTitle = "Payment Due Today! ⏰";
+             messageBody = "Heads up! Your Spotify payment of Rs. 212 is due TODAY.";
+        } else {
+             messageTitle = `Upcoming: Payment Due in ${daysLeft} days`;
+             messageBody = `Reminder: Your Spotify payment of Rs. 212 is due on the 8th!`;
         }
-      } else {
-        console.log(`- No FCM token for ${member.name}, skipping push.`);
+    } else {
+        // Overdue! (remainingBalance < -1 OR day > 8)
+        messageTitle = "Payment OVERDUE! ⚠️";
+        messageBody = `Your Spotify payment is OVERDUE! Please pay your outstanding balance ASAP.`;
+    }
+
+    console.log(`Member ${member.name} is due (Balance: ${remainingBalance}). Sending: ${messageTitle}`);
+
+    // Add to in-app notifications
+    await supabase.from('notifications').insert({
+      member_id: member.id,
+      message: messageBody,
+      is_read: false
+    });
+    console.log(`- Created in-app notification for ${member.name}`);
+
+    // Send Push Notification if FCM token exists
+    if (member.fcm_token) {
+      const payload = {
+        notification: {
+          title: messageTitle,
+          body: messageBody
+        },
+        token: member.fcm_token
+      };
+
+      try {
+        const response = await admin.messaging().send(payload);
+        console.log(`- Sent push notification to ${member.name}: ${response}`);
+      } catch (error) {
+        console.error(`- Error sending push to ${member.name}:`, error);
       }
     } else {
-      console.log(`Member ${member.name} is paid up (Balance: +${remainingBalance}).`);
+      console.log(`- No FCM token for ${member.name}, skipping push.`);
     }
   }
 
