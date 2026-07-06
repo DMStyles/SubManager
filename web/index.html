@@ -195,12 +195,11 @@
 
   function monthOptions() {
     let opts = '';
-    const d = new Date(2026, 3, 1); // April 2026
+    const d = new Date(2026, 4, 1); // May 2026
     for (let i = 0; i < 12; i++) {
       const y = d.getFullYear(), m = d.getMonth();
       const val = `${y}-${String(m + 1).padStart(2, '0')}`;
-      const label = d.toLocaleString('default', { month: 'long' }) + ' ' + y;
-      opts += `<option value="${val}">${label}</option>`;
+      opts += `<option value="${val}">${d.toLocaleString('default', { month: 'long', year: 'numeric' })}</option>`;
       d.setMonth(d.getMonth() + 1);
     }
     return opts;
