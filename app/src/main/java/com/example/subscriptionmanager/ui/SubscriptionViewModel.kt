@@ -317,7 +317,7 @@ class SubscriptionViewModel : ViewModel() {
     fun checkForUpdates(currentVersion: String, onResult: ((Boolean) -> Unit)? = null) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                val url = java.net.URL("https://raw.githubusercontent.com/DMStyles/SubManager/master/version.json")
+                val url = java.net.URL("https://raw.githubusercontent.com/DMStyles/SubManager/master/version.json?t=${System.currentTimeMillis()}")
                 val connection = url.openConnection() as java.net.HttpURLConnection
                 connection.requestMethod = "GET"
                 connection.connectTimeout = 5000
