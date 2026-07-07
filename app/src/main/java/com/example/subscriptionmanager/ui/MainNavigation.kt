@@ -64,7 +64,7 @@ fun MainNavigation() {
 
         is AppRoute.Dashboard -> {
             val memberState by viewModel.currentUserState.collectAsStateWithLifecycle()
-            if (r.role == "admin") {
+            if (r.role == "admin" || r.role == "manager") {
                 ManagerDashboardScreen(
                     viewModel = viewModel,
                     subscriptionId = r.subscriptionId,

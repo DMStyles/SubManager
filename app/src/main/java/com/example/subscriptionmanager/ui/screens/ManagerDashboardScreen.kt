@@ -51,6 +51,18 @@ fun ManagerDashboardScreen(
     ) {
         Scaffold(
             containerColor = Color.Transparent,
+            topBar = {
+                @OptIn(ExperimentalMaterial3Api::class)
+                TopAppBar(
+                    title = { Text(activeSubscription?.name ?: "Group Admin", color = Color.White) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                )
+            },
             bottomBar = {
                 NavigationBar(containerColor = Color(0xFF111827), tonalElevation = 0.dp) {
                     listOf(
