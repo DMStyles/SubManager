@@ -12,8 +12,8 @@ android {
         applicationId = "com.example.subscriptionmanager"
         minSdk = 26
         targetSdk = 34
-        versionCode = 9
-        versionName = "1.10"
+        versionCode = 10
+        versionName = "1.11"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

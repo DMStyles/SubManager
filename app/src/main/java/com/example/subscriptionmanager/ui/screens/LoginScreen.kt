@@ -89,7 +89,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
 
                             val googleIdOption = GetGoogleIdOption.Builder()
                                 .setFilterByAuthorizedAccounts(false)
-                                .setServerClientId("350629337526-lvk4ds88nebg1tu7n9ourhogmslddbm9.apps.googleusercontent.com")
+                                .setServerClientId("397312997448-n3gv9ks942eng4m6fg584e0ribtgcssf.apps.googleusercontent.com")
                                 .setNonce(hashedNonce)
                                 .build()
 
