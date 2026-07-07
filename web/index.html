@@ -309,8 +309,8 @@
     }
 
     document.getElementById('main-content').innerHTML = `
-      <a href="https://github.com/DMStyles/SubManager/releases/latest/download/SubManager-v1.11.apk" target="_blank" style="display:block; text-align:center; background:var(--green); color:white; padding:12px; border-radius:12px; margin-bottom: 24px; text-decoration:none; font-weight:600; font-size:14px;">
-        📱 Download Latest Android App (v1.11)
+      <a href="SubManager-v2.0.apk" target="_blank" style="display:block; text-align:center; background:var(--green); color:white; padding:12px; border-radius:12px; margin-bottom: 24px; text-decoration:none; font-weight:600; font-size:14px;">
+        🤖 Download Latest Android App (v2.0.1)
       </a>
       ${pingHtml}
       <p class="section-title">Hello, ${member.name.split(' ')[0]}! 👋</p>
@@ -372,7 +372,6 @@
       const total = (payments || []).reduce((s, p) => s + p.amount, 0);
       const monthsPaid = Math.floor(total / 211);
       const remaining = monthsPaid - monthsUsed;
-      const status = getStatus(remaining);
       const progress = Math.min(100, (monthsUsed / Math.max(1, monthsPaid)) * 100);
       return `
         <div class="card">
@@ -398,8 +397,8 @@
     }));
 
     document.getElementById('main-content').innerHTML = `
-        <a href="https://github.com/DMStyles/SubManager/releases/latest/download/SubManager-v1.11.apk" target="_blank" style="display:block; text-align:center; background:var(--green); color:white; padding:12px; border-radius:12px; margin-bottom: 24px; text-decoration:none; font-weight:600; font-size:14px;">
-          📱 Download Latest Android App (v1.11)
+        <a href="SubManager-v2.0.apk" target="_blank" style="display:block; text-align:center; background:var(--green); color:white; padding:12px; border-radius:12px; margin-bottom: 24px; text-decoration:none; font-weight:600; font-size:14px;">
+          🤖 Download Latest Android App (v2.0.1)
         </a>
         <p class="section-title">All Members</p>${memberCards.join('')}`;
     }
