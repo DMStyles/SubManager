@@ -30,11 +30,20 @@ import com.example.subscriptionmanager.ui.MemberState
 import com.example.subscriptionmanager.ui.SubscriptionViewModel
 
 @Composable
-fun ManagerDashboardScreen(viewModel: SubscriptionViewModel, onLogout: () -> Unit, onMemberClick: (String) -> Unit) {
+fun ManagerDashboardScreen(
+    viewModel: SubscriptionViewModel,
+    subscriptionId: String,
+    onLogout: () -> Unit,
+    onMemberClick: (String) -> Unit,
+    onEditSubscription: () -> Unit = {},
+    onBack: () -> Unit = {}
+) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val members by viewModel.members.collectAsStateWithLifecycle()
+    val activeSubscription by viewModel.activeSubscription.collectAsStateWithLifecycle()
+    val inviteCode by viewModel.inviteCode.collectAsStateWithLifecycle()
 
-    LaunchedEffect(Unit) { viewModel.loadData() }
+    LaunchedEffect(subscriptionId) { viewModel.loadData() }
 
     Box(
         modifier = Modifier.fillMaxSize()
@@ -421,7 +430,7 @@ fun ManagerMemberCard(member: MemberState, onMemberClick: (String) -> Unit) {
     val progress = if (member.totalMonthsPaid > 0) member.monthsUsed.toFloat() / member.totalMonthsPaid.toFloat() else 0f
     val animatedProgress by animateFloatAsState(progress.coerceIn(0f, 1f), tween(800), label = "p")
     val viewModel: SubscriptionViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
-    val pingSuccess by viewModel.pingSuccess.collectAsStateWithLifecycle()
+    val pingSuccess by viewModel.successMessage.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
 
     LaunchedEffect(pingSuccess) {

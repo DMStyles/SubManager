@@ -45,11 +45,11 @@ val TextMuted = Color(0xFF8A9BB5)
 val TextWhite = Color.White
 
 @Composable
-fun MemberDashboardScreen(viewModel: SubscriptionViewModel, onLogout: () -> Unit) {
+fun MemberDashboardScreen(viewModel: SubscriptionViewModel, subscriptionId: String = "", onLogout: () -> Unit, onBack: () -> Unit = {}) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val currentUser by viewModel.currentUserState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(subscriptionId) {
         viewModel.loadData()
         viewModel.checkUnreadNotifications()
     }

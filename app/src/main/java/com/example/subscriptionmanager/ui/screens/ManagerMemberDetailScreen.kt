@@ -34,7 +34,7 @@ import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ManagerMemberDetailScreen(viewModel: SubscriptionViewModel, memberId: String, onBack: () -> Unit) {
+fun ManagerMemberDetailScreen(viewModel: SubscriptionViewModel, memberId: String, subscriptionId: String = "", onBack: () -> Unit) {
     val members by viewModel.members.collectAsStateWithLifecycle()
     val member = members.find { it.id == memberId }
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
