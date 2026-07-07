@@ -48,6 +48,7 @@ val TextWhite = Color.White
 fun MemberDashboardScreen(viewModel: SubscriptionViewModel, subscriptionId: String = "", onLogout: () -> Unit, onBack: () -> Unit = {}) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val currentUser by viewModel.currentUserState.collectAsStateWithLifecycle()
+    val activeSubscription by viewModel.activeSubscription.collectAsStateWithLifecycle()
 
     LaunchedEffect(subscriptionId) {
         viewModel.loadData()
