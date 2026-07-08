@@ -29,6 +29,8 @@ import com.example.subscriptionmanager.BuildConfig
 import com.example.subscriptionmanager.ui.AppRoute
 import com.example.subscriptionmanager.ui.SubscriptionViewModel
 import com.example.subscriptionmanager.ui.SubscriptionWithRole
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val SLBgDark       = Color(0xFF0D0D0D)
 private val SLBgCard       = Color(0xFF161B27)
@@ -52,6 +54,9 @@ fun SubscriptionListScreen(
 
     var showFab by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+    var updateCheckResult by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
 
     val context = LocalContext.current
 
@@ -195,11 +200,24 @@ fun SubscriptionListScreen(
 
                 // Check for updates button
                 Surface(
-                    color = Color(0xFF1E2740),
+                    color = if (isCheckingUpdate) Color(0xFF1A2E1A) else Color(0xFF1E2740),
                     shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth().clickable {
-                        showSettings = false
-                        viewModel.checkForUpdate()
+                    modifier = Modifier.fillMaxWidth().clickable(enabled = !isCheckingUpdate) {
+                        if (!isCheckingUpdate) {
+                            isCheckingUpdate = true
+                            updateCheckResult = null
+                            coroutineScope.launch {
+                                viewModel.checkForUpdate()
+                                // give the coroutine a moment to complete
+                                kotlinx.coroutines.delay(1500)
+                                isCheckingUpdate = false
+                                updateCheckResult = if (viewModel.updateInfo.value != null) {
+                                    "🎉 Update available! Tap the download button above."
+                                } else {
+                                    "✓ You're on the latest version!"
+                                }
+                            }
+                        }
                     }
                 ) {
                     Row(
@@ -207,8 +225,25 @@ fun SubscriptionListScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Icon(Icons.Filled.Refresh, contentDescription = null, tint = SLAccentGreen, modifier = Modifier.size(20.dp))
-                        Text("Check for Updates", color = SLTextWhite, fontSize = 15.sp)
+                        if (isCheckingUpdate) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = SLAccentGreen,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Filled.Refresh, contentDescription = null, tint = SLAccentGreen, modifier = Modifier.size(20.dp))
+                        }
+                        Column {
+                            Text(
+                                if (isCheckingUpdate) "Checking for updates…" else "Check for Updates",
+                                color = SLTextWhite,
+                                fontSize = 15.sp
+                            )
+                            updateCheckResult?.let {
+                                Text(it, color = SLAccentGreen, fontSize = 12.sp)
+                            }
+                        }
                     }
                 }
 

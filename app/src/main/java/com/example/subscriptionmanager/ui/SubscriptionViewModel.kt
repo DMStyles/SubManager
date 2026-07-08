@@ -537,9 +537,12 @@ class SubscriptionViewModel : ViewModel() {
             try {
                 repository.deleteSubscription(subscriptionId)
                 _activeSubscription.value = null
+                _members.value = emptyList()
+                // Navigate back to list first, then reload
+                route.value = AppRoute.SubscriptionList
                 loadSubscriptionList()
             } catch (e: Exception) {
-                _errorMessage.value = "Failed to delete subscription."
+                _errorMessage.value = "Failed to delete: ${e.message}"
             } finally {
                 _isLoading.value = false
             }

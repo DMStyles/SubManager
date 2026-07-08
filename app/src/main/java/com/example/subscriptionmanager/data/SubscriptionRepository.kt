@@ -89,6 +89,34 @@ data class SubscriptionMember(
     val joined_at: String? = null
 )
 
+@Serializable
+data class UpdateSubscriptionPayload(
+    val name: String,
+    val description: String?,
+    val monthly_cost: Double,
+    val billing_day: Int,
+    val start_date: String,
+    val max_members: Int
+)
+
+@Serializable
+data class UpdateInviteCodePayload(
+    val invite_code: String,
+    val invite_expires_at: String
+)
+
+@Serializable
+data class UpdateFcmPayload(val fcm_token: String)
+
+@Serializable
+data class UpdateAuthIdPayload(val auth_id: String)
+
+@Serializable
+data class UpdateMonthsPayload(val months_used: Int)
+
+@Serializable
+data class UpdateIsReadPayload(val is_read: Boolean)
+
 // ─────────────────────────────────────────────
 // Repository
 // ─────────────────────────────────────────────
@@ -113,13 +141,13 @@ class SubscriptionRepository {
     }
 
     suspend fun updateFcmToken(memberId: String, token: String) = withContext(Dispatchers.IO) {
-        supabase.postgrest["members"].update(mapOf("fcm_token" to token)) {
+        supabase.postgrest["members"].update(UpdateFcmPayload(fcm_token = token)) {
             filter { eq("id", memberId) }
         }
     }
 
     suspend fun claimProfile(memberId: String, authId: String) = withContext(Dispatchers.IO) {
-        supabase.postgrest["members"].update(mapOf("auth_id" to authId)) {
+        supabase.postgrest["members"].update(UpdateAuthIdPayload(auth_id = authId)) {
             filter { eq("id", memberId) }
         }
     }
@@ -137,7 +165,7 @@ class SubscriptionRepository {
     suspend fun incrementMonthsUsedForEveryone() = withContext(Dispatchers.IO) {
         val members = getMembers()
         for (member in members) {
-            supabase.postgrest["members"].update(mapOf("months_used" to member.months_used + 1)) {
+            supabase.postgrest["members"].update(UpdateMonthsPayload(months_used = member.months_used + 1)) {
                 filter { eq("id", member.id) }
             }
         }
@@ -197,7 +225,7 @@ class SubscriptionRepository {
         }
 
     suspend fun markNotificationsRead(memberId: String) = withContext(Dispatchers.IO) {
-        supabase.postgrest["notifications"].update(mapOf("is_read" to true)) {
+        supabase.postgrest["notifications"].update(UpdateIsReadPayload(is_read = true)) {
             filter { eq("member_id", memberId) }
         }
     }
@@ -301,13 +329,13 @@ class SubscriptionRepository {
         maxMembers: Int
     ) = withContext(Dispatchers.IO) {
         supabase.postgrest["subscriptions"].update(
-            mapOf(
-                "name" to name,
-                "description" to description,
-                "monthly_cost" to monthlyCost,
-                "billing_day" to billingDay,
-                "start_date" to startDate,
-                "max_members" to maxMembers
+            UpdateSubscriptionPayload(
+                name = name,
+                description = description,
+                monthly_cost = monthlyCost,
+                billing_day = billingDay,
+                start_date = startDate,
+                max_members = maxMembers
             )
         ) {
             filter { eq("id", subscriptionId) }
@@ -318,7 +346,10 @@ class SubscriptionRepository {
         val newCode = generateInviteCode()
         val expiresAt = getExpiryTimestamp()
         supabase.postgrest["subscriptions"].update(
-            mapOf("invite_code" to newCode, "invite_expires_at" to expiresAt)
+            UpdateInviteCodePayload(
+                invite_code = newCode,
+                invite_expires_at = expiresAt
+            )
         ) {
             filter { eq("id", subscriptionId) }
         }
