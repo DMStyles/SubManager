@@ -60,6 +60,11 @@ fun ManagerDashboardScreen(
                             Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
                         }
                     },
+                    actions = {
+                        IconButton(onClick = onEditSubscription) {
+                            Icon(Icons.Filled.Edit, contentDescription = "Edit Group", tint = Color.White)
+                        }
+                    },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
                 )
             },

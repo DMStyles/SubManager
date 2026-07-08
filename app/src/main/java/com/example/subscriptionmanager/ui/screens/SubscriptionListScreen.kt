@@ -1,11 +1,14 @@
 package com.example.subscriptionmanager.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -16,11 +19,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.subscriptionmanager.BuildConfig
 import com.example.subscriptionmanager.ui.AppRoute
 import com.example.subscriptionmanager.ui.SubscriptionViewModel
 import com.example.subscriptionmanager.ui.SubscriptionWithRole
@@ -33,6 +38,7 @@ private val SLTextWhite    = Color(0xFFFFFFFF)
 private val SLTextMuted    = Color(0xFF8A9BB5)
 private val SLDividerColor = Color(0xFF2A3347)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SubscriptionListScreen(
     viewModel: SubscriptionViewModel,
@@ -41,9 +47,190 @@ fun SubscriptionListScreen(
     val subscriptions by viewModel.subscriptions.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
-    var showFab by remember { mutableStateOf(false) }
+    val currentMember by viewModel.currentMember.collectAsStateWithLifecycle()
+    val updateInfo by viewModel.updateInfo.collectAsStateWithLifecycle()
 
-    LaunchedEffect(Unit) { viewModel.loadSubscriptionList() }
+    var showFab by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+
+    // Auto-check for updates each time the home screen opens
+    LaunchedEffect(Unit) {
+        viewModel.loadSubscriptionList()
+        viewModel.checkForUpdate()
+    }
+
+    // Update available dialog
+    updateInfo?.let { info ->
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissUpdate() },
+            containerColor = Color(0xFF1A2035),
+            icon = {
+                Text("🎉", fontSize = 32.sp)
+            },
+            title = {
+                Text(
+                    "Update Available!",
+                    color = SLTextWhite,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 20.sp
+                )
+            },
+            text = {
+                Text(
+                    "SubManager v${info.latestVersion} is now available. Download it to get the latest features and fixes.",
+                    color = SLTextMuted,
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Center
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.dismissUpdate()
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(info.downloadUrl))
+                        context.startActivity(intent)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SLAccentGreen),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Download", color = Color.White, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissUpdate() }) {
+                    Text("Later", color = SLTextMuted)
+                }
+            }
+        )
+    }
+
+    // Settings bottom sheet
+    if (showSettings) {
+        ModalBottomSheet(
+            onDismissRequest = { showSettings = false },
+            containerColor = Color(0xFF161B27),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 40.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Header
+                Text(
+                    "Settings",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 22.sp,
+                    color = SLTextWhite,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                // Profile card
+                currentMember?.let { member ->
+                    Surface(
+                        color = Color(0xFF1E2740),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        Brush.linearGradient(
+                                            listOf(SLAccentGreen, SLAccentBlue)
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    member.name.take(1).uppercase(),
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 20.sp
+                                )
+                            }
+                            Column {
+                                Text(member.name, color = SLTextWhite, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                                Text("Subscription Manager", color = SLTextMuted, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // App version row
+                Surface(
+                    color = Color(0xFF1E2740),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(Icons.Filled.Info, contentDescription = null, tint = SLAccentBlue, modifier = Modifier.size(20.dp))
+                            Text("App Version", color = SLTextWhite, fontSize = 15.sp)
+                        }
+                        Text("v${BuildConfig.VERSION_NAME}", color = SLTextMuted, fontSize = 14.sp)
+                    }
+                }
+
+                Spacer(Modifier.height(4.dp))
+
+                // Check for updates button
+                Surface(
+                    color = Color(0xFF1E2740),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        showSettings = false
+                        viewModel.checkForUpdate()
+                    }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(Icons.Filled.Refresh, contentDescription = null, tint = SLAccentGreen, modifier = Modifier.size(20.dp))
+                        Text("Check for Updates", color = SLTextWhite, fontSize = 15.sp)
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // Logout button
+                Button(
+                    onClick = {
+                        showSettings = false
+                        viewModel.logout(onLogout)
+                    },
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A1A1A))
+                ) {
+                    Icon(Icons.Filled.ExitToApp, contentDescription = null, tint = Color(0xFFFF5C5C))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Logout", color = Color(0xFFFF5C5C), fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(SLBgDark)) {
         LazyColumn(
@@ -67,8 +254,8 @@ fun SubscriptionListScreen(
                                 Text("My Subscriptions", fontWeight = FontWeight.Bold, fontSize = 26.sp, color = SLTextWhite)
                                 Text("${subscriptions.size} group${if (subscriptions.size != 1) "s" else ""}", color = SLTextMuted, fontSize = 14.sp)
                             }
-                            IconButton(onClick = onLogout) {
-                                Icon(Icons.Filled.ExitToApp, contentDescription = "Logout", tint = SLTextMuted)
+                            IconButton(onClick = { showSettings = true }) {
+                                Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = SLTextMuted)
                             }
                         }
                     }

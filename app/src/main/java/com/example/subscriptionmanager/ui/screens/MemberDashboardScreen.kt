@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import com.example.subscriptionmanager.data.Payment
 import com.example.subscriptionmanager.ui.MemberState
 import com.example.subscriptionmanager.ui.SubscriptionViewModel
@@ -379,20 +380,20 @@ fun PaymentRow(payment: Payment) {
 @Composable
 fun AppSettingsTab(onLogout: () -> Unit, viewModel: SubscriptionViewModel? = null) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val sharedPrefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
     var notificationsEnabled by remember { mutableStateOf(sharedPrefs.getBoolean("notifications_enabled", true)) }
     var daysBefore by remember { mutableFloatStateOf(sharedPrefs.getInt("days_before_reminder", 4).toFloat()) }
-    
-    val updateAvailableState = viewModel?.updateAvailable?.collectAsStateWithLifecycle()
-    val updateAvailable = updateAvailableState?.value ?: false
+
+    val updateInfo by (viewModel?.updateInfo ?: kotlinx.coroutines.flow.MutableStateFlow(null)).collectAsStateWithLifecycle()
 
     val packageInfo = remember {
         try { context.packageManager.getPackageInfo(context.packageName, 0) } catch (e: Exception) { null }
     }
-    val versionName = packageInfo?.versionName ?: "1.3"
+    val versionName = packageInfo?.versionName ?: "2.0.2"
 
     LaunchedEffect(Unit) {
-        viewModel?.checkForUpdates(versionName)
+        viewModel?.checkForUpdate()
     }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
@@ -463,14 +464,11 @@ fun AppSettingsTab(onLogout: () -> Unit, viewModel: SubscriptionViewModel? = nul
                         Text("Current Version", color = TextMuted, fontSize = 12.sp)
                         Text("v$versionName", color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     }
-                    if (updateAvailable) {
+                    if (updateInfo != null) {
                         Button(
                             onClick = {
-                                val url = viewModel?.latestUpdateUrl?.value
-                                if (url != null) {
-                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
-                                    context.startActivity(intent)
-                                }
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(updateInfo!!.downloadUrl))
+                                context.startActivity(intent)
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = AccentGreen),
                             shape = RoundedCornerShape(10.dp)
@@ -488,9 +486,12 @@ fun AppSettingsTab(onLogout: () -> Unit, viewModel: SubscriptionViewModel? = nul
                         if (!isCheckingUpdate) {
                             isCheckingUpdate = true
                             checkResult = null
-                            viewModel?.checkForUpdates(versionName) { hasUpdate ->
-                                isCheckingUpdate = false
-                                checkResult = if (hasUpdate) "Update found! Tap above to download." else "You're on the latest version!"
+                            viewModel?.let { vm ->
+                                coroutineScope.launch {
+                                    vm.checkForUpdate()
+                                    isCheckingUpdate = false
+                                    checkResult = if (vm.updateInfo.value != null) "Update found! Tap above to download." else "You're on the latest version!"
+                                }
                             }
                         }
                     },

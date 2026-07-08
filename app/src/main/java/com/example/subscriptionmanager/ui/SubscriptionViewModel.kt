@@ -2,7 +2,10 @@ package com.example.subscriptionmanager.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.subscriptionmanager.BuildConfig
 import com.example.subscriptionmanager.data.*
+import com.example.subscriptionmanager.service.UpdateChecker
+import com.example.subscriptionmanager.service.UpdateInfo
 import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -96,10 +99,17 @@ class SubscriptionViewModel : ViewModel() {
     val unreadNotifications: StateFlow<List<AppNotification>> = _unreadNotifications
 
     // Update checker
-    private val _updateAvailable = MutableStateFlow(false)
-    val updateAvailable: StateFlow<Boolean> = _updateAvailable
-    private val _latestUpdateUrl = MutableStateFlow<String?>(null)
-    val latestUpdateUrl: StateFlow<String?> = _latestUpdateUrl
+    private val _updateInfo = MutableStateFlow<UpdateInfo?>(null)
+    val updateInfo: StateFlow<UpdateInfo?> = _updateInfo
+
+    fun checkForUpdate() {
+        viewModelScope.launch {
+            val info = UpdateChecker.check(BuildConfig.VERSION_NAME)
+            if (info.available) _updateInfo.value = info
+        }
+    }
+
+    fun dismissUpdate() { _updateInfo.value = null }
 
     // ── Helpers ───────────────────────────────
 
@@ -536,37 +546,5 @@ class SubscriptionViewModel : ViewModel() {
         }
     }
 
-    // ── Update Checker ────────────────────────
-
-    fun checkForUpdates(currentVersion: String, onResult: ((Boolean) -> Unit)? = null) {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                val url = java.net.URL("https://raw.githubusercontent.com/DMStyles/SubManager/master/version.json?t=${System.currentTimeMillis()}")
-                val connection = url.openConnection() as java.net.HttpURLConnection
-                connection.requestMethod = "GET"
-                connection.connectTimeout = 5000
-                connection.readTimeout = 5000
-                connection.connect()
-                if (connection.responseCode == 200) {
-                    val response = connection.inputStream.bufferedReader().use { it.readText() }
-                    val json = org.json.JSONObject(response)
-                    val latestVersion = json.getString("versionName")
-                    val downloadUrl = json.getString("downloadUrl")
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        if (latestVersion != currentVersion) {
-                            _updateAvailable.value = true
-                            _latestUpdateUrl.value = downloadUrl
-                            onResult?.invoke(true)
-                        } else {
-                            onResult?.invoke(false)
-                        }
-                    }
-                } else {
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { onResult?.invoke(false) }
-                }
-            } catch (e: Exception) {
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { onResult?.invoke(false) }
-            }
-        }
-    }
 }
+
