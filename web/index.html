@@ -248,7 +248,7 @@
 
     const { data: member } = await sb.from('members').select('*').eq('auth_id', user.id).single();
     if (!member) {
-      await renderClaimProfile(user.id);
+      await renderCreateProfile(user.id);
       return; 
     }
     currentMemberId = member.id;
@@ -256,41 +256,36 @@
     await renderSubscriptionList(member);
   }
 
-  // ─── CLAIM PROFILE VIEW ──────────────────────────────────────────────────────
-  async function renderClaimProfile(userId) {
-    const { data: members } = await sb.from('members').select('*');
-    const unclaimed = (members || []).filter(m => !m.auth_id || m.auth_id.trim() === '');
-    
-    let html = `<p class="section-title">Claim Your Profile</p>
+  // ─── CREATE PROFILE VIEW ──────────────────────────────────────────────────────
+  async function renderCreateProfile(userId) {
+    let html = `<p class="section-title">Create Your Profile</p>
       <p style="color:var(--muted); font-size:13px; margin-bottom: 20px;">
-        Select your name from the list below to link your Spotify group account to this login.
+        Welcome to SubManager! Please enter your name to create your global profile. You will then be able to join groups using an Invite Code.
       </p>
-      <div style="display:flex; flex-direction:column; gap:12px;">`;
-      
-    if (unclaimed.length === 0) {
-      html += `<p style="color:var(--orange)">No unclaimed profiles available. Ask your manager to add you first!</p>`;
-    } else {
-      unclaimed.forEach(m => {
-        html += `<div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0; padding:16px;">
-          <div style="display:flex; align-items:center; gap:12px;">
-            <div class="avatar">${m.name[0]}</div>
-            <span class="member-card-name">${m.name}</span>
-          </div>
-          <button class="btn" style="width:auto; padding:8px 16px;" onclick="claimProfile('${m.id}', '${userId}')">Claim</button>
-        </div>`;
-      });
-    }
-    html += `</div>`;
+      <div class="card">
+        <div class="input-group">
+          <label>Your Name</label>
+          <input type="text" id="new-profile-name" placeholder="John Doe" />
+        </div>
+        <button class="btn" style="margin-top: 16px;" onclick="createProfile('${userId}')">Create Profile</button>
+      </div>`;
     document.getElementById('main-content').innerHTML = html;
   }
 
-  async function claimProfile(memberId, userId) {
-    const { error } = await sb.from('members').update({ auth_id: userId }).eq('id', memberId);
+  async function createProfile(userId) {
+    const name = document.getElementById('new-profile-name').value.trim();
+    if (!name) return alert('Please enter your name.');
+    
+    const { error } = await sb.from('members').insert({
+      name: name,
+      auth_id: userId,
+      role: 'member',
+      months_used: 0
+    });
+    
     if (error) {
-      alert("Error claiming profile: " + error.message);
+      alert('Error creating profile: ' + error.message);
     } else {
-      alert("Profile claimed successfully!");
-      document.getElementById('main-content').innerHTML = '<div class="loader">Loading your dashboard...</div>';
       await initApp();
     }
   }
