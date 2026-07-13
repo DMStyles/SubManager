@@ -143,19 +143,19 @@ class SubscriptionViewModel : ViewModel() {
         }
     }
 
-    fun claimProfile(memberId: String) {
+    fun createProfile(name: String) {
         viewModelScope.launch {
             _isLoading.value = true
             try {
                 val authUser = supabase.auth.currentUserOrNull() ?: return@launch
-                repository.claimProfile(memberId, authUser.id)
+                repository.createProfile(name, authUser.id)
                 val member = repository.getMemberByAuthId(authUser.id)
                 if (member != null) {
                     _currentMember.value = member
                     loadSubscriptionList(member)
                 }
             } catch (e: Exception) {
-                _errorMessage.value = "Failed to claim profile. Please try again."
+                _errorMessage.value = "Failed to create profile. Please try again."
             } finally {
                 _isLoading.value = false
             }

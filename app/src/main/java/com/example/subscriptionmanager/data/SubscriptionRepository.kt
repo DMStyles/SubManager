@@ -147,9 +147,13 @@ class SubscriptionRepository {
         }
     }
 
-    suspend fun claimProfile(memberId: String, authId: String) = withContext(Dispatchers.IO) {
+    suspend fun createProfile(name: String, authId: String) = withContext(Dispatchers.IO) {
+        val member = supabase.postgrest["members"].insert(
+            NewMember(name = name)
+        ).decodeSingle<Member>()
+        
         supabase.postgrest["members"].update(UpdateAuthIdPayload(auth_id = authId)) {
-            filter { eq("id", memberId) }
+            filter { eq("id", member.id) }
         }
     }
 
