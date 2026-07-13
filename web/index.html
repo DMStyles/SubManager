@@ -303,8 +303,8 @@
 
     if (!subMembers || subMembers.length === 0) {
       document.getElementById('main-content').innerHTML = `
-        <a href="SubManager-v2.0.3.apk" target="_blank" style="display:block; text-align:center; background:var(--green); color:white; padding:12px; border-radius:12px; margin-bottom: 24px; text-decoration:none; font-weight:600; font-size:14px;">
-          🤖 Download Latest Android App (v2.0.3)
+        <a href="SubManager-v2.0.4.apk" target="_blank" style="display:block; text-align:center; background:var(--green); color:white; padding:12px; border-radius:12px; margin-bottom: 24px; text-decoration:none; font-weight:600; font-size:14px;">
+          🤖 Download Latest Android App (v2.0.4)
         </a>
         <p class="section-title">Hello, ${member.name.split(' ')[0]}! 👋</p>
         <p style="color:var(--muted); font-size:14px; margin-top:20px;">You haven't joined any groups yet. Please download the Android app to join or create a group using an Invite Code.</p>
@@ -313,8 +313,8 @@
     }
 
     let listHtml = `
-      <a href="SubManager-v2.0.3.apk" target="_blank" style="display:block; text-align:center; background:var(--green); color:white; padding:12px; border-radius:12px; margin-bottom: 24px; text-decoration:none; font-weight:600; font-size:14px;">
-        🤖 Download Latest Android App (v2.0.3)
+      <a href="SubManager-v2.0.4.apk" target="_blank" style="display:block; text-align:center; background:var(--green); color:white; padding:12px; border-radius:12px; margin-bottom: 24px; text-decoration:none; font-weight:600; font-size:14px;">
+        🤖 Download Latest Android App (v2.0.4)
       </a>
       <p class="section-title">Your Groups</p>
       <div style="display:flex; flex-direction:column; gap:12px;">
@@ -358,7 +358,7 @@
       .eq('subscription_id', sub.id)
       .order('created_at', { ascending: false });
     
-    const { data: notifs } = await sb.from('notifications').select('*').eq('member_id', member.id).eq('is_read', false);
+    const { data: notifs } = await sb.from('notifications').select('*').eq('member_id', member.id).eq('subscription_id', sub.id).eq('is_read', false);
     
     const monthsUsed = getDynamicMonthsUsed(sub.start_date);
     const total = (payments || []).reduce((s, p) => s + p.amount, 0);
@@ -371,7 +371,7 @@
       pingHtml = `<div class="ping-banner">
         <span>🔔</span>
         <p><strong>Reminder from Admin</strong><br>${notifs[0].message}</p>
-        <button class="ping-close" onclick="dismissPing('${member.id}')">✕</button>
+        <button class="ping-close" onclick="dismissPing('${member.id}', '${sub.id}')">✕</button>
       </div>`;
     }
 
@@ -459,7 +459,7 @@
           </div>
           <div style="display:flex;gap:10px">
             <button class="btn" style="flex:1;padding:10px" onclick="openMemberDetail('${sub.id}', '${m.id}', '${m.name}', ${sub.monthly_cost}, '${sub.start_date}')">Details</button>
-            <button class="ping-btn" onclick="pingMember('${m.id}','${m.name}')">🔔 Ping</button>
+            <button class="ping-btn" onclick="pingMember('${m.id}','${m.name}','${sub.id}', ${sub.monthly_cost}, ${sub.billing_day})">🔔 Ping</button>
           </div>
         </div>`;
     }));
@@ -502,13 +502,21 @@
     await openGroup(subId, 'member'); // reload
   }
 
-  async function pingMember(memberId, name) {
-    await sb.from('notifications').insert({ member_id: memberId, message: 'Reminder: Your payment is due soon!' });
-    alert(`✅ Pinged ${name}!`);
+  async function pingMember(memberId, name, subId, monthlyCost, billingDay) {
+    const { error } = await sb.from('notifications').insert({ 
+      member_id: memberId, 
+      subscription_id: subId,
+      message: `Reminder: Your payment of Rs. ${Math.round(monthlyCost)} is due on the ${billingDay}th!` 
+    });
+    if (error) {
+      alert(`❌ Failed to ping ${name}: ${error.message}`);
+    } else {
+      alert(`✅ Pinged ${name}!`);
+    }
   }
 
-  async function dismissPing(memberId) {
-    await sb.from('notifications').update({ is_read: true }).eq('member_id', memberId);
+  async function dismissPing(memberId, subId) {
+    await sb.from('notifications').update({ is_read: true }).eq('member_id', memberId).eq('subscription_id', subId);
     await initApp();
   }
 

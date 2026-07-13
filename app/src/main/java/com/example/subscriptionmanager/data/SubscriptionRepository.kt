@@ -43,6 +43,7 @@ data class NewMember(
 data class AppNotification(
     val id: String? = null,
     val member_id: String,
+    val subscription_id: String? = null,
     val message: String,
     val is_read: Boolean = false,
     val created_at: String? = null
@@ -208,25 +209,29 @@ class SubscriptionRepository {
 
     // ── Notifications ─────────────────────────
 
-    suspend fun sendPing(memberId: String, message: String) = withContext(Dispatchers.IO) {
+    suspend fun sendPing(memberId: String, subscriptionId: String, message: String) = withContext(Dispatchers.IO) {
         supabase.postgrest["notifications"].insert(
-            AppNotification(member_id = memberId, message = message)
+            AppNotification(member_id = memberId, subscription_id = subscriptionId, message = message)
         )
     }
 
-    suspend fun getUnreadNotifications(memberId: String): List<AppNotification> =
+    suspend fun getUnreadNotifications(memberId: String, subscriptionId: String): List<AppNotification> =
         withContext(Dispatchers.IO) {
             supabase.postgrest["notifications"].select {
                 filter {
                     eq("member_id", memberId)
+                    eq("subscription_id", subscriptionId)
                     eq("is_read", false)
                 }
             }.decodeList<AppNotification>()
         }
 
-    suspend fun markNotificationsRead(memberId: String) = withContext(Dispatchers.IO) {
+    suspend fun markNotificationsRead(memberId: String, subscriptionId: String) = withContext(Dispatchers.IO) {
         supabase.postgrest["notifications"].update(UpdateIsReadPayload(is_read = true)) {
-            filter { eq("member_id", memberId) }
+            filter {
+                eq("member_id", memberId)
+                eq("subscription_id", subscriptionId)
+            }
         }
     }
 

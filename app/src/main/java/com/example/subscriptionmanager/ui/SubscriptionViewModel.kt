@@ -391,10 +391,13 @@ class SubscriptionViewModel : ViewModel() {
     fun pingMember(memberId: String, memberName: String) {
         viewModelScope.launch {
             try {
-                val sub = _activeSubscription.value
-                val cost = sub?.monthly_cost?.toInt() ?: 212
-                val billingDay = sub?.billing_day ?: 8
-                repository.sendPing(memberId, "Reminder: Your payment of Rs. $cost is due on the ${billingDay}th!")
+                val sub = _activeSubscription.value ?: run {
+                    _errorMessage.value = "No active group found."
+                    return@launch
+                }
+                val cost = sub.monthly_cost.toInt()
+                val billingDay = sub.billing_day
+                repository.sendPing(memberId, sub.id, "Reminder: Your payment of Rs. $cost is due on the ${billingDay}th!")
                 _successMessage.value = "Pinged $memberName!"
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to send ping."
@@ -423,7 +426,8 @@ class SubscriptionViewModel : ViewModel() {
             try {
                 val authUser = supabase.auth.currentUserOrNull() ?: return@launch
                 val member = repository.getMemberByAuthId(authUser.id) ?: return@launch
-                _unreadNotifications.value = repository.getUnreadNotifications(member.id)
+                val sub = _activeSubscription.value ?: return@launch
+                _unreadNotifications.value = repository.getUnreadNotifications(member.id, sub.id)
             } catch (_: Exception) {}
         }
     }
@@ -433,7 +437,8 @@ class SubscriptionViewModel : ViewModel() {
             try {
                 val authUser = supabase.auth.currentUserOrNull() ?: return@launch
                 val member = repository.getMemberByAuthId(authUser.id) ?: return@launch
-                repository.markNotificationsRead(member.id)
+                val sub = _activeSubscription.value ?: return@launch
+                repository.markNotificationsRead(member.id, sub.id)
                 _unreadNotifications.value = emptyList()
             } catch (_: Exception) {}
         }
