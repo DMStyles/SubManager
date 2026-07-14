@@ -368,9 +368,8 @@ class SubscriptionRepository {
     suspend fun joinByInviteCode(inviteCode: String, memberId: String): Subscription =
         withContext(Dispatchers.IO) {
             // Look up the subscription
-            val sub = supabase.postgrest["subscriptions"].select {
-                filter { eq("invite_code", inviteCode.trim().uppercase()) }
-            }.decodeList<Subscription>().firstOrNull()
+            val sub = supabase.postgrest.rpc("get_subscription_by_invite_code", mapOf("p_code" to inviteCode.trim().uppercase()))
+                .decodeList<Subscription>().firstOrNull()
                 ?: throw Exception("Invalid invite code. Please check and try again.")
 
             // Check expiry
