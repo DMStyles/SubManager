@@ -19,120 +19,145 @@ if (!firebaseConfigStr) {
 }
 const serviceAccount = JSON.parse(firebaseConfigStr);
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+}
 
-// Calculate how many months have passed since May 2026
-function getDynamicMonthsUsed() {
-  const START_YEAR = 2026;
-  const START_MONTH = 5; // May
+function getDynamicMonthsUsed(startDateStr) {
+  const start = new Date(startDateStr);
   const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth() + 1;
-  const used = (y - START_YEAR) * 12 + (m - START_MONTH) + 1;
+  const used = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()) + 1;
   return Math.max(1, used);
 }
 
-// Calculate days until the 8th of the month
-function getDaysUntilPayment() {
+// Calculate days until billing day
+function getDaysUntilBilling(billingDay) {
   const now = new Date();
-  const day = now.getDate();
-  if (day <= 8) {
-    return 8 - day;
+  const currentDay = now.getDate();
+  if (currentDay <= billingDay) {
+    return billingDay - currentDay;
   } else {
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    return (daysInMonth - day) + 8;
+    return (daysInMonth - currentDay) + billingDay;
   }
 }
 
 async function runReminders() {
-  const dynamicMonthsUsed = getDynamicMonthsUsed();
-  const daysUntilPayment = getDaysUntilPayment();
-  const MONTHLY_COST = 211.0;
-
   const now = new Date();
-  const day = now.getDate();
+  const currentDay = now.getDate();
 
-  // Run on specific days to avoid spamming every single day
-  const allowedDays = [4, 6, 7, 8, 9, 12, 15, 18, 21, 25];
-  if (!allowedDays.includes(day)) {
-    console.log(`Today is the ${day}th. Not a scheduled notification day. Skipping.`);
-    return;
-  }
+  console.log(`Running reminder job for day ${currentDay}...`);
 
-  // Fetch all members
-  const { data: members, error: membersErr } = await supabase.from('members').select('*');
-  if (membersErr) {
-    console.error("Failed to fetch members:", membersErr);
+  // Fetch all subscriptions
+  const { data: subscriptions, error: subErr } = await supabase.from('subscriptions').select('*');
+  if (subErr) {
+    console.error("Failed to fetch subscriptions:", subErr);
     process.exit(1);
   }
+
+  // Fetch all members to get FCM tokens
+  const { data: members, error: memErr } = await supabase.from('members').select('*');
+  if (memErr) {
+    console.error("Failed to fetch members:", memErr);
+    process.exit(1);
+  }
+
+  const memberMap = new Map();
+  members.forEach(m => memberMap.set(m.id, m));
 
   // Fetch all payments
-  const { data: payments, error: paymentsErr } = await supabase.from('payments').select('*');
-  if (paymentsErr) {
-    console.error("Failed to fetch payments:", paymentsErr);
+  const { data: payments, error: payErr } = await supabase.from('payments').select('*');
+  if (payErr) {
+    console.error("Failed to fetch payments:", payErr);
     process.exit(1);
   }
 
-  for (const member of members) {
-    const memberPayments = payments.filter(p => p.member_id === member.id);
-    const totalPaid = memberPayments.reduce((acc, p) => acc + p.amount, 0);
-    const totalMonthsPaid = Math.floor(totalPaid / MONTHLY_COST);
-    const remainingBalance = totalMonthsPaid - dynamicMonthsUsed;
+  // Fetch all subscription_members
+  const { data: subMembers, error: smErr } = await supabase.from('subscription_members').select('*');
+  if (smErr) {
+    console.error("Failed to fetch subscription_members:", smErr);
+    process.exit(1);
+  }
 
-    if (remainingBalance >= 0) {
-      console.log(`Member ${member.name} is paid up (Balance: +${remainingBalance}).`);
-      continue;
+  for (const sub of subscriptions) {
+    const billingDay = sub.billing_day;
+    const daysUntilBilling = getDaysUntilBilling(billingDay);
+    const monthsUsed = getDynamicMonthsUsed(sub.start_date);
+
+    // Only process if it's the exact billing day or 3 days before or 3 days after
+    const isDueToday = (currentDay === billingDay);
+    const isUpcoming = (daysUntilBilling > 0 && daysUntilBilling <= 3);
+    const isOverdue = (currentDay > billingDay && currentDay <= billingDay + 3) || (billingDay - currentDay < -25); // simple wrap logic
+
+    if (!isDueToday && !isUpcoming && !isOverdue) {
+        console.log(`[${sub.name}] Billing day is ${billingDay}. Today is ${currentDay}. Skipping.`);
+        continue;
     }
 
-    let messageTitle = "";
-    let messageBody = "";
+    console.log(`[${sub.name}] Checking members... (Billing Day: ${billingDay}, Cost: ${sub.monthly_cost})`);
 
-    if (remainingBalance === -1 && day <= 8) {
-        // Grace period (Upcoming / Due Today)
-        const daysLeft = 8 - day;
-        if (daysLeft === 0) {
-             messageTitle = "Payment Due Today! ⏰";
-             messageBody = "Heads up! Your Spotify payment of Rs. 212 is due TODAY.";
-        } else {
-             messageTitle = `Upcoming: Payment Due in ${daysLeft} days`;
-             messageBody = `Reminder: Your Spotify payment of Rs. 212 is due on the 8th!`;
-        }
-    } else {
-        // Overdue! (remainingBalance < -1 OR day > 8)
-        messageTitle = "Payment OVERDUE! ⚠️";
-        messageBody = `Your Spotify payment is OVERDUE! Please pay your outstanding balance ASAP.`;
-    }
+    const groupMembers = subMembers.filter(sm => sm.subscription_id === sub.id);
 
-    console.log(`Member ${member.name} is due (Balance: ${remainingBalance}). Sending: ${messageTitle}`);
+    for (const sm of groupMembers) {
+      const member = memberMap.get(sm.member_id);
+      if (!member) continue;
 
-    // Add to in-app notifications
-    await supabase.from('notifications').insert({
-      member_id: member.id,
-      message: messageBody,
-      is_read: false
-    });
-    console.log(`- Created in-app notification for ${member.name}`);
+      const memberPayments = payments.filter(p => p.subscription_id === sub.id && p.member_id === member.id);
+      const totalPaid = memberPayments.reduce((acc, p) => acc + p.amount, 0);
+      const totalMonthsPaid = Math.floor(totalPaid / sub.monthly_cost);
+      const remainingBalance = totalMonthsPaid - monthsUsed;
 
-    // Send Push Notification if FCM token exists
-    if (member.fcm_token) {
-      const payload = {
-        notification: {
-          title: messageTitle,
-          body: messageBody
-        },
-        token: member.fcm_token
-      };
-
-      try {
-        const response = await admin.messaging().send(payload);
-        console.log(`- Sent push notification to ${member.name}: ${response}`);
-      } catch (error) {
-        console.error(`- Error sending push to ${member.name}:`, error);
+      if (remainingBalance >= 0) {
+        console.log(` - ${member.name} is paid up (Balance: +${remainingBalance}).`);
+        continue;
       }
-    } else {
-      console.log(`- No FCM token for ${member.name}, skipping push.`);
+
+      let messageTitle = "";
+      let messageBody = "";
+
+      if (isDueToday) {
+        messageTitle = `${sub.name} Payment Due Today! ⏰`;
+        messageBody = `Heads up! Your payment of Rs. ${sub.monthly_cost} for ${sub.name} is due TODAY.`;
+      } else if (isUpcoming) {
+        messageTitle = `Upcoming: ${sub.name} Payment Due in ${daysUntilBilling} days`;
+        messageBody = `Reminder: Your payment of Rs. ${sub.monthly_cost} for ${sub.name} is due on the ${billingDay}th!`;
+      } else if (isOverdue) {
+        messageTitle = `${sub.name} Payment OVERDUE! ⚠️`;
+        messageBody = `Your payment for ${sub.name} is OVERDUE! Please pay your outstanding balance ASAP.`;
+      }
+
+      console.log(` - ${member.name} is due (Balance: ${remainingBalance}). Sending: ${messageTitle}`);
+
+      // Add to in-app notifications
+      await supabase.from('notifications').insert({
+        member_id: member.id,
+        subscription_id: sub.id,
+        message: messageBody,
+        is_read: false
+      });
+      console.log(`   > Created in-app notification for ${member.name}`);
+
+      // Send Push Notification if FCM token exists
+      if (member.fcm_token) {
+        const payload = {
+          notification: {
+            title: messageTitle,
+            body: messageBody
+          },
+          token: member.fcm_token
+        };
+
+        try {
+          const response = await admin.messaging().send(payload);
+          console.log(`   > Sent push notification to ${member.name}: ${response}`);
+        } catch (error) {
+          console.error(`   > Error sending push to ${member.name}:`, error);
+        }
+      } else {
+        console.log(`   > No FCM token for ${member.name}, skipping push.`);
+      }
     }
   }
 
