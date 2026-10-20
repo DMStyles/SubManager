@@ -1,5 +1,6 @@
 const { createClient } = require('@supabase/supabase-js');
 const admin = require('firebase-admin');
+const ws = require('ws');
 
 // 1. Initialize Supabase
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -12,6 +13,9 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
     persistSession: false
+  },
+  realtime: {
+    transport: ws
   }
 });
 
