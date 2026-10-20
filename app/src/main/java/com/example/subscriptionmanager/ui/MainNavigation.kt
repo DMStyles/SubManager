@@ -5,12 +5,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.example.subscriptionmanager.ui.screens.*
 
 @Composable
 fun MainNavigation() {
+    val navController = rememberNavController()
     val viewModel: SubscriptionViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val route by viewModel.route.collectAsStateWithLifecycle()
 
@@ -18,77 +21,49 @@ fun MainNavigation() {
         viewModel.checkAuthAndRoute()
     }
 
-    when (val r = route) {
+    when (route) {
         is AppRoute.Loading -> {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Color(0xFF1DB954))
+                CircularProgressIndicator()
             }
         }
-
         is AppRoute.Login -> {
-            LoginScreen(onLoginSuccess = { viewModel.checkAuthAndRoute() })
+            NavHost(navController = navController, startDestination = "login") {
+                composable("login") {
+                    LoginScreen(onLoginSuccess = {
+                        viewModel.checkAuthAndRoute()
+                    })
+                }
+            }
         }
-
         is AppRoute.ClaimProfile -> {
-            ClaimProfileScreen(viewModel = viewModel)
+            NavHost(navController = navController, startDestination = "claim") {
+                composable("claim") {
+                    ClaimProfileScreen(viewModel = viewModel)
+                }
+            }
         }
-
-        is AppRoute.SubscriptionList -> {
-            SubscriptionListScreen(
-                viewModel = viewModel,
-                onLogout = { viewModel.logout {} }
-            )
-        }
-
-        is AppRoute.CreateSubscription -> {
-            CreateSubscriptionScreen(
-                viewModel = viewModel,
-                onBack = { viewModel.navigateTo(AppRoute.SubscriptionList) }
-            )
-        }
-
-        is AppRoute.JoinSubscription -> {
-            JoinSubscriptionScreen(
-                viewModel = viewModel,
-                onBack = { viewModel.navigateTo(AppRoute.SubscriptionList) }
-            )
-        }
-
-        is AppRoute.EditSubscription -> {
-            EditSubscriptionScreen(
-                viewModel = viewModel,
-                subscriptionId = r.subscriptionId,
-                onBack = { viewModel.navigateTo(AppRoute.Dashboard(r.subscriptionId, "admin")) }
-            )
-        }
-
         is AppRoute.Dashboard -> {
             val memberState by viewModel.currentUserState.collectAsStateWithLifecycle()
-            if (r.role == "admin" || r.role == "manager") {
+            if (memberState?.role == "manager") {
                 ManagerDashboardScreen(
                     viewModel = viewModel,
-                    subscriptionId = r.subscriptionId,
                     onLogout = { viewModel.logout {} },
-                    onMemberClick = { memberId -> viewModel.navigateTo(AppRoute.MemberDetail(memberId, r.subscriptionId)) },
-                    onEditSubscription = { viewModel.navigateTo(AppRoute.EditSubscription(r.subscriptionId)) },
-                    onBack = { viewModel.navigateTo(AppRoute.SubscriptionList) }
+                    onMemberClick = { memberId -> viewModel.navigateTo(AppRoute.MemberDetail(memberId)) }
                 )
             } else {
                 MemberDashboardScreen(
                     viewModel = viewModel,
-                    subscriptionId = r.subscriptionId,
-                    onLogout = { viewModel.logout {} },
-                    onBack = { viewModel.navigateTo(AppRoute.SubscriptionList) }
+                    onLogout = { viewModel.logout {} }
                 )
             }
         }
-
         is AppRoute.MemberDetail -> {
+            val memberState by viewModel.currentUserState.collectAsStateWithLifecycle()
             ManagerMemberDetailScreen(
                 viewModel = viewModel,
-                memberId = r.memberId,
-                subscriptionId = r.subscriptionId,
-                onBack = { viewModel.navigateTo(AppRoute.Dashboard(r.subscriptionId, "admin")) }
+                memberId = (route as AppRoute.MemberDetail).memberId,
+                onBack = { viewModel.navigateTo(AppRoute.Dashboard(memberState?.role ?: "manager")) }
             )
         }
     }

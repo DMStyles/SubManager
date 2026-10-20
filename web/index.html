@@ -171,16 +171,13 @@
   const { createClient } = supabase;
   const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  let currentUserId = null;
-  let currentMemberId = null; 
-  
-  function getDynamicMonthsUsed(startDate) {
-    if (!startDate) return 1;
+  const MONTHLY_COST = 212;
+  const START_YEAR = 2026, START_MONTH = 5; // May 2026
+
+  function getDynamicMonthsUsed() {
     const now = new Date();
-    const start = new Date(startDate);
-    const y = now.getFullYear() - start.getFullYear();
-    const m = now.getMonth() - start.getMonth();
-    const used = y * 12 + m + 1;
+    const y = now.getFullYear(), m = now.getMonth() + 1;
+    const used = (y - START_YEAR) * 12 + (m - START_MONTH) + 1;
     return Math.max(1, used);
   }
 
@@ -196,10 +193,9 @@
     return { text: '⚠ Payment Due', cls: 'badge-due' };
   }
 
-  function monthOptions(startDate) {
+  function monthOptions() {
     let opts = '';
-    const d = startDate ? new Date(startDate) : new Date();
-    d.setDate(1); // Set to 1st to avoid month overflow bugs
+    const d = new Date(2026, 4, 1); // May 2026
     for (let i = 0; i < 12; i++) {
       const y = d.getFullYear(), m = d.getMonth();
       const val = `${y}-${String(m + 1).padStart(2, '0')}`;
@@ -241,123 +237,65 @@
   async function initApp() {
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return;
-    currentUserId = user.id;
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app-screen').style.display = 'block';
-    document.getElementById('main-content').innerHTML = '<div class="loader">Loading...</div>';
 
     const { data: member } = await sb.from('members').select('*').eq('auth_id', user.id).single();
     if (!member) {
-      await renderCreateProfile(user.id);
+      await renderClaimProfile(user.id);
       return; 
     }
-    currentMemberId = member.id;
 
-    await renderSubscriptionList(member);
+    if (member.role === 'manager') await renderManager(member);
+    else await renderMember(member);
   }
 
-  // ─── CREATE PROFILE VIEW ──────────────────────────────────────────────────────
-  async function renderCreateProfile(userId) {
-    let html = `<p class="section-title">Create Your Profile</p>
+  // ─── CLAIM PROFILE VIEW ──────────────────────────────────────────────────────
+  async function renderClaimProfile(userId) {
+    const { data: members } = await sb.from('members').select('*');
+    const unclaimed = (members || []).filter(m => !m.auth_id || m.auth_id.trim() === '');
+    
+    let html = `<p class="section-title">Claim Your Profile</p>
       <p style="color:var(--muted); font-size:13px; margin-bottom: 20px;">
-        Welcome to SubManager! Please enter your name to create your global profile. You will then be able to join groups using an Invite Code.
+        Select your name from the list below to link your Spotify group account to this login.
       </p>
-      <div class="card">
-        <div class="input-group">
-          <label>Your Name</label>
-          <input type="text" id="new-profile-name" placeholder="John Doe" />
-        </div>
-        <button class="btn" style="margin-top: 16px;" onclick="createProfile('${userId}')">Create Profile</button>
-      </div>`;
+      <div style="display:flex; flex-direction:column; gap:12px;">`;
+      
+    if (unclaimed.length === 0) {
+      html += `<p style="color:var(--orange)">No unclaimed profiles available. Ask your manager to add you first!</p>`;
+    } else {
+      unclaimed.forEach(m => {
+        html += `<div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0; padding:16px;">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div class="avatar">${m.name[0]}</div>
+            <span class="member-card-name">${m.name}</span>
+          </div>
+          <button class="btn" style="width:auto; padding:8px 16px;" onclick="claimProfile('${m.id}', '${userId}')">Claim</button>
+        </div>`;
+      });
+    }
+    html += `</div>`;
     document.getElementById('main-content').innerHTML = html;
   }
 
-  async function createProfile(userId) {
-    const name = document.getElementById('new-profile-name').value.trim();
-    if (!name) return alert('Please enter your name.');
-    
-    const { error } = await sb.from('members').insert({
-      name: name,
-      auth_id: userId,
-      role: 'member',
-      months_used: 0
-    });
-    
+  async function claimProfile(memberId, userId) {
+    const { error } = await sb.from('members').update({ auth_id: userId }).eq('id', memberId);
     if (error) {
-      alert('Error creating profile: ' + error.message);
+      alert("Error claiming profile: " + error.message);
     } else {
+      alert("Profile claimed successfully!");
+      document.getElementById('main-content').innerHTML = '<div class="loader">Loading your dashboard...</div>';
       await initApp();
     }
   }
 
-  // ─── SUBSCRIPTION LIST ───────────────────────────────────────────────────────
-  async function renderSubscriptionList(member) {
-    const { data: subMembers } = await sb.from('subscription_members')
-      .select('*, subscriptions(*)')
-      .eq('member_id', member.id);
-
-    if (!subMembers || subMembers.length === 0) {
-      document.getElementById('main-content').innerHTML = `
-        <a href="SubManager-v2.0.6.apk" target="_blank" style="display:block; text-align:center; background:var(--green); color:white; padding:12px; border-radius:12px; margin-top: 16px; margin-bottom: 24px; text-decoration:none; font-weight:600; font-size:14px;">
-          🤖 Download Latest Android App (v2.0.6)
-        </a>
-        <p class="section-title">Hello, ${member.name.split(' ')[0]}! 👋</p>
-        <p style="color:var(--muted); font-size:14px; margin-top:20px;">You haven't joined any groups yet. Please download the Android app to join or create a group using an Invite Code.</p>
-      `;
-      return;
-    }
-
-    let listHtml = `
-      <a href="SubManager-v2.0.6.apk" target="_blank" style="display:block; text-align:center; background:var(--green); color:white; padding:12px; border-radius:12px; margin-bottom: 24px; text-decoration:none; font-weight:600; font-size:14px;">
-        🤖 Download Latest Android App (v2.0.6)
-      </a>
-      <p class="section-title">Your Groups</p>
-      <div style="display:flex; flex-direction:column; gap:12px;">
-    `;
-
-    subMembers.forEach(sm => {
-      const sub = sm.subscriptions;
-      const roleStr = sm.role === 'manager' ? '👑 Manager' : '👤 Member';
-      listHtml += `
-        <div class="card" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center;" onclick="openGroup('${sub.id}', '${sm.role}')">
-          <div>
-            <div style="font-weight:600; font-size:16px;">${sub.name}</div>
-            <div style="color:var(--muted); font-size:12px; margin-top:4px;">${roleStr} · Rs. ${sub.monthly_cost}/mo</div>
-          </div>
-          <div style="color:var(--green); font-size:20px;">→</div>
-        </div>
-      `;
-    });
-    listHtml += `</div>`;
-    document.getElementById('main-content').innerHTML = listHtml;
-  }
-
-  async function openGroup(subId, role) {
-    document.getElementById('main-content').innerHTML = '<div class="loader">Loading group...</div>';
-    
-    // Fetch subscription details
-    const { data: sub } = await sb.from('subscriptions').select('*').eq('id', subId).single();
-    
-    if (role === 'manager') {
-      await renderManager(sub);
-    } else {
-      await renderMember(sub);
-    }
-  }
-
   // ─── MEMBER VIEW ─────────────────────────────────────────────────────────────
-  async function renderMember(sub) {
-    const { data: member } = await sb.from('members').select('*').eq('id', currentMemberId).single();
-    const { data: payments } = await sb.from('payments').select('*')
-      .eq('member_id', member.id)
-      .eq('subscription_id', sub.id)
-      .order('created_at', { ascending: false });
-    
-    const { data: notifs } = await sb.from('notifications').select('*').eq('member_id', member.id).eq('subscription_id', sub.id).eq('is_read', false);
-    
-    const monthsUsed = getDynamicMonthsUsed(sub.start_date);
+  async function renderMember(member) {
+    const { data: payments } = await sb.from('payments').select('*').eq('member_id', member.id).order('created_at', { ascending: false });
+    const { data: notifs } = await sb.from('notifications').select('*').eq('member_id', member.id).eq('is_read', false);
+    const monthsUsed = getDynamicMonthsUsed();
     const total = (payments || []).reduce((s, p) => s + p.amount, 0);
-    const monthsPaid = Math.floor(total / sub.monthly_cost);
+    const monthsPaid = Math.floor(total / 211);
     const remaining = monthsPaid - monthsUsed;
     const status = getStatus(remaining);
 
@@ -366,14 +304,16 @@
       pingHtml = `<div class="ping-banner">
         <span>🔔</span>
         <p><strong>Reminder from Admin</strong><br>${notifs[0].message}</p>
-        <button class="ping-close" onclick="dismissPing('${member.id}', '${sub.id}')">✕</button>
+        <button class="ping-close" onclick="dismissPing('${member.id}')">✕</button>
       </div>`;
     }
 
     document.getElementById('main-content').innerHTML = `
-      <button onclick="initApp()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:14px;margin-bottom:16px">← Back to Groups</button>
+      <a href="https://github.com/DMStyles/SubManager/releases/latest/download/SubManager-v2.1.0.apk" target="_blank" style="display:block; text-align:center; background:var(--green); color:white; padding:12px; border-radius:12px; margin-bottom: 24px; text-decoration:none; font-weight:600; font-size:14px;">
+        📱 Download Latest Android App (v1.11)
+      </a>
       ${pingHtml}
-      <p class="section-title">${sub.name}</p>
+      <p class="section-title">Hello, ${member.name.split(' ')[0]}! 👋</p>
       <div class="card">
         <div class="card-row">
           <span class="card-label">Status</span>
@@ -392,12 +332,12 @@
       <div class="payment-form">
         <h3>Add Payment</h3>
         <div class="form-row">
-          <div class="input-group"><label>Amount (Rs.)</label><input type="number" id="amt" placeholder="${sub.monthly_cost}" /></div>
+          <div class="input-group"><label>Amount (Rs.)</label><input type="number" id="amt" placeholder="212" /></div>
           <div class="input-group"><label>Date</label><input type="date" id="pdate" value="${new Date().toISOString().split('T')[0]}" /></div>
         </div>
-        <div class="input-group"><label>For Month</label><select id="pmonth">${monthOptions(sub.start_date)}</select></div>
+        <div class="input-group"><label>For Month</label><select id="pmonth">${monthOptions()}</select></div>
         <div id="extra-hint" style="color:var(--green);font-size:12px;margin-top:8px;display:none"></div>
-        <div class="form-submit"><button class="btn" onclick="addPayment('${sub.id}', '${member.id}', ${sub.monthly_cost})">Submit Payment</button></div>
+        <div class="form-submit"><button class="btn" onclick="addPayment('${member.id}')">Submit Payment</button></div>
       </div>
 
       <p class="section-title">Transaction History</p>
@@ -417,34 +357,32 @@
     document.getElementById('amt').addEventListener('input', function() {
       const v = parseFloat(this.value);
       const hint = document.getElementById('extra-hint');
-      if (v > sub.monthly_cost) { const m = Math.floor(v / sub.monthly_cost); hint.textContent = `💡 Rs. ${v} covers ${m} month(s)`; hint.style.display = 'block'; }
+      if (v > MONTHLY_COST) { const m = Math.floor(v / MONTHLY_COST); hint.textContent = `💡 Rs. ${v} covers ${m} month(s)`; hint.style.display = 'block'; }
       else hint.style.display = 'none';
     });
   }
 
   // ─── MANAGER VIEW ─────────────────────────────────────────────────────────────
-  async function renderManager(sub) {
-    const { data: subMembers } = await sb.from('subscription_members').select('*, members(*)').eq('subscription_id', sub.id);
-    const monthsUsed = getDynamicMonthsUsed(sub.start_date);
+  async function renderManager() {
+    const { data: members } = await sb.from('members').select('*');
+    const monthsUsed = getDynamicMonthsUsed();
 
-    const memberCards = await Promise.all((subMembers || []).map(async sm => {
-      const m = sm.members;
-      const { data: payments } = await sb.from('payments').select('*').eq('member_id', m.id).eq('subscription_id', sub.id);
+    const memberCards = await Promise.all((members || []).map(async m => {
+      const { data: payments } = await sb.from('payments').select('*').eq('member_id', m.id);
       const total = (payments || []).reduce((s, p) => s + p.amount, 0);
-      const monthsPaid = Math.floor(total / sub.monthly_cost);
+      const monthsPaid = Math.floor(total / 211);
       const remaining = monthsPaid - monthsUsed;
+      const status = getStatus(remaining);
       const progress = Math.min(100, (monthsUsed / Math.max(1, monthsPaid)) * 100);
-      const mStatus = getStatus(remaining);
-      
       return `
         <div class="card">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
             <div class="avatar">${m.name[0]}</div>
             <div style="flex:1">
-              <div class="member-card-name">${m.name} <span style="font-size:11px;color:var(--muted);font-weight:normal">${sm.role === 'manager' ? '(Manager)' : ''}</span></div>
+              <div class="member-card-name">${m.name}</div>
               <div class="member-card-sub">${payments?.length || 0} payments · Rs. ${total}</div>
             </div>
-            <span class="status-badge ${mStatus.cls}">${mStatus.text}</span>
+            <span class="status-badge ${status.cls}">${status.text}</span>
           </div>
           <div class="progress-bar"><div class="progress-fill" style="width:${progress}%;background:${remaining<=0?'var(--red)':'var(--green)'}"></div></div>
           <div style="display:flex;justify-content:space-between;margin-bottom:14px">
@@ -453,77 +391,62 @@
             <span style="font-size:11px;font-weight:600;color:${remaining<=0?'var(--red)':'var(--green)'}">Left: ${remaining} mo</span>
           </div>
           <div style="display:flex;gap:10px">
-            <button class="btn" style="flex:1;padding:10px" onclick="openMemberDetail('${sub.id}', '${m.id}', '${m.name}', ${sub.monthly_cost}, '${sub.start_date}')">Details</button>
-            <button class="ping-btn" onclick="pingMember('${m.id}','${m.name}','${sub.id}', ${sub.monthly_cost}, ${sub.billing_day})">🔔 Ping</button>
+            <button class="btn" style="flex:1;padding:10px" onclick="openMemberDetail('${m.id}','${m.name}')">Details</button>
+            <button class="ping-btn" onclick="pingMember('${m.id}','${m.name}')">🔔 Ping</button>
           </div>
         </div>`;
     }));
 
     document.getElementById('main-content').innerHTML = `
-        <button onclick="initApp()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:14px;margin-bottom:16px;display:block;">← Back to Groups</button>
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <p class="section-title" style="margin:0;">${sub.name}</p>
-          <div style="background:#1A2E20; color:var(--green); padding:4px 10px; border-radius:8px; font-size:12px; font-weight:600;">Code: ${sub.invite_code}</div>
-        </div>
-        <p style="color:var(--muted); font-size:13px; margin-top:4px; margin-bottom:24px;">Rs. ${sub.monthly_cost}/mo · Billed on ${sub.billing_day}th</p>
-        
-        <p class="section-title">All Members</p>${memberCards.join('')}
-    `;
-  }
+        <a href="https://github.com/DMStyles/SubManager/releases/latest/download/SubManager-v2.1.0.apk" target="_blank" style="display:block; text-align:center; background:var(--green); color:white; padding:12px; border-radius:12px; margin-bottom: 24px; text-decoration:none; font-weight:600; font-size:14px;">
+          📱 Download Latest Android App (v1.11)
+        </a>
+        <p class="section-title">All Members</p>${memberCards.join('')}`;
+    }
 
   // ─── ACTIONS ─────────────────────────────────────────────────────────────────
-  async function addPayment(subId, memberId, monthlyCost) {
+  async function addPayment(memberId) {
     const amount = parseFloat(document.getElementById('amt').value);
     const date = document.getElementById('pdate').value;
     const month = document.getElementById('pmonth').value;
     if (!amount || amount <= 0) return alert('Enter a valid amount');
-    
-    const monthsCount = Math.max(1, Math.floor(amount / monthlyCost));
+    const monthsCount = Math.max(1, Math.floor(amount / 211.0));
     const parts = month.split('-');
-    
     if (monthsCount > 1 && parts.length === 2) {
-      let year = parseInt(parts[0]);
-      let m = parseInt(parts[1]);
+      let year = parseInt(parts[0]) || 2026;
+      let m = parseInt(parts[1]) || 1;
       const amountPerMonth = amount / monthsCount;
       for (let i = 0; i < monthsCount; i++) {
         const currentMonthStr = `${year}-${String(m).padStart(2, '0')}`;
-        await sb.from('payments').insert({ subscription_id: subId, member_id: memberId, amount: amountPerMonth, payment_date: date, payment_for_month: currentMonthStr });
+        await sb.from('payments').insert({ member_id: memberId, amount: amountPerMonth, payment_date: date, payment_for_month: currentMonthStr });
         m++;
         if (m > 12) { m = 1; year++; }
       }
     } else {
-      await sb.from('payments').insert({ subscription_id: subId, member_id: memberId, amount, payment_date: date, payment_for_month: month });
+      await sb.from('payments').insert({ member_id: memberId, amount, payment_date: date, payment_for_month: month });
     }
-    await openGroup(subId, 'member'); // reload
-  }
-
-  async function pingMember(memberId, name, subId, monthlyCost, billingDay) {
-    const { error } = await sb.from('notifications').insert({ 
-      member_id: memberId, 
-      subscription_id: subId,
-      message: `Reminder: Your payment of Rs. ${Math.round(monthlyCost)} is due on the ${billingDay}th!` 
-    });
-    if (error) {
-      alert(`❌ Failed to ping ${name}: ${error.message}`);
-    } else {
-      alert(`✅ Pinged ${name}!`);
-    }
-  }
-
-  async function dismissPing(memberId, subId) {
-    await sb.from('notifications').update({ is_read: true }).eq('member_id', memberId).eq('subscription_id', subId);
     await initApp();
   }
 
-  async function openMemberDetail(subId, memberId, name, monthlyCost, startDate) {
-    const { data: payments } = await sb.from('payments').select('*').eq('member_id', memberId).eq('subscription_id', subId).order('created_at', { ascending: false });
+  async function pingMember(memberId, name) {
+    await sb.from('notifications').insert({ member_id: memberId, message: 'Reminder: Your Spotify payment of Rs. 212 is due on the 8th!' });
+    alert(`✅ Pinged ${name}!`);
+  }
+
+  async function dismissPing(memberId) {
+    await sb.from('notifications').update({ is_read: true }).eq('member_id', memberId);
+    await initApp();
+  }
+
+  async function openMemberDetail(memberId, name) {
+    const { data: payments } = await sb.from('payments').select('*').eq('member_id', memberId).order('created_at', { ascending: false });
     const total = (payments || []).reduce((s, p) => s + p.amount, 0);
-    const monthsUsed = getDynamicMonthsUsed(startDate);
-    const monthsPaid = Math.floor(total / monthlyCost);
+    const monthsUsed = getDynamicMonthsUsed();
+    const monthsPaid = Math.floor(total / 211);
     const remaining = monthsPaid - monthsUsed;
 
     document.getElementById('main-content').innerHTML = `
-      <button onclick="openGroup('${subId}', 'manager')" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:14px;margin-bottom:16px;display:block;">← Back</button>
+      <button onclick="initApp()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:14px;margin-top:16px">← Back</button>
       <p class="section-title">${name}</p>
       <div class="card">
         <div class="card-row"><span class="card-label">Total Paid</span><span style="color:var(--green);font-weight:600">Rs. ${total}</span></div>
@@ -533,11 +456,11 @@
       <div class="payment-form">
         <h3>Add Payment</h3>
         <div class="form-row">
-          <div class="input-group"><label>Amount</label><input type="number" id="amt" placeholder="${monthlyCost}" /></div>
+          <div class="input-group"><label>Amount</label><input type="number" id="amt" placeholder="212" /></div>
           <div class="input-group"><label>Date</label><input type="date" id="pdate" value="${new Date().toISOString().split('T')[0]}" /></div>
         </div>
-        <div class="input-group"><label>For Month</label><select id="pmonth">${monthOptions(startDate)}</select></div>
-        <div class="form-submit"><button class="btn" onclick="addPaymentManager('${subId}', '${memberId}', '${name}', ${monthlyCost}, '${startDate}')">Submit</button></div>
+        <div class="input-group"><label>For Month</label><select id="pmonth">${monthOptions()}</select></div>
+        <div class="form-submit"><button class="btn" onclick="addPaymentManager('${memberId}')">Submit</button></div>
       </div>
       <p class="section-title">Transactions</p>
       <div class="card">
@@ -546,40 +469,39 @@
           <div class="tx-icon">💳</div>
           <div class="tx-info"><div class="tx-month">${p.payment_for_month || 'Unknown'}</div><div class="tx-date">${p.payment_date || '-'}</div></div>
           <div class="tx-amount">Rs. ${p.amount}</div>
-          <button onclick="deletePayment('${p.id}', '${subId}', '${memberId}', '${name}', ${monthlyCost}, '${startDate}')" style="background:transparent;border:none;color:var(--red);cursor:pointer;font-size:18px">🗑</button>
+          <button onclick="deletePayment('${p.id}','${memberId}','${name}')" style="background:transparent;border:none;color:var(--red);cursor:pointer;font-size:18px">🗑</button>
         </div>`).join('') || '<p style="color:var(--muted);text-align:center;padding:20px">No payments.</p>'}
       </div>`;
   }
 
-  async function addPaymentManager(subId, memberId, name, monthlyCost, startDate) {
+  async function addPaymentManager(memberId) {
     const amount = parseFloat(document.getElementById('amt').value);
     const date = document.getElementById('pdate').value;
     const month = document.getElementById('pmonth').value;
     if (!amount || amount <= 0) return alert('Enter a valid amount');
-    
-    const monthsCount = Math.max(1, Math.floor(amount / monthlyCost));
+    const monthsCount = Math.max(1, Math.floor(amount / 211.0));
     const parts = month.split('-');
-    
     if (monthsCount > 1 && parts.length === 2) {
-      let year = parseInt(parts[0]);
-      let m = parseInt(parts[1]);
+      let year = parseInt(parts[0]) || 2026;
+      let m = parseInt(parts[1]) || 1;
       const amountPerMonth = amount / monthsCount;
       for (let i = 0; i < monthsCount; i++) {
         const currentMonthStr = `${year}-${String(m).padStart(2, '0')}`;
-        await sb.from('payments').insert({ subscription_id: subId, member_id: memberId, amount: amountPerMonth, payment_date: date, payment_for_month: currentMonthStr });
+        await sb.from('payments').insert({ member_id: memberId, amount: amountPerMonth, payment_date: date, payment_for_month: currentMonthStr });
         m++;
         if (m > 12) { m = 1; year++; }
       }
     } else {
-      await sb.from('payments').insert({ subscription_id: subId, member_id: memberId, amount, payment_date: date, payment_for_month: month });
+      await sb.from('payments').insert({ member_id: memberId, amount, payment_date: date, payment_for_month: month });
     }
-    await openMemberDetail(subId, memberId, name, monthlyCost, startDate);
+    const { data: mData } = await sb.from('members').select('name').eq('id', memberId).single();
+    await openMemberDetail(memberId, mData.name);
   }
 
-  async function deletePayment(paymentId, subId, memberId, name, monthlyCost, startDate) {
+  async function deletePayment(paymentId, memberId, memberName) {
     if (!confirm('Delete this payment?')) return;
     await sb.from('payments').delete().eq('id', paymentId);
-    await openMemberDetail(subId, memberId, name, monthlyCost, startDate);
+    await openMemberDetail(memberId, memberName);
   }
 
   // ─── STARTUP ──────────────────────────────────────────────────────────────────
@@ -591,8 +513,6 @@
     const { data: { session } } = await sb.auth.getSession();
     if (session) initApp();
   })();
-
 </script>
 </body>
 </html>
-

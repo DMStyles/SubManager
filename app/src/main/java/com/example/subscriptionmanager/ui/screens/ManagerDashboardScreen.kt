@@ -26,27 +26,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.subscriptionmanager.data.Subscription
 import com.example.subscriptionmanager.ui.MemberState
 import com.example.subscriptionmanager.ui.SubscriptionViewModel
-import android.content.Context
-import androidx.compose.ui.platform.LocalContext
 
 @Composable
-fun ManagerDashboardScreen(
-    viewModel: SubscriptionViewModel,
-    subscriptionId: String,
-    onLogout: () -> Unit,
-    onMemberClick: (String) -> Unit,
-    onEditSubscription: () -> Unit = {},
-    onBack: () -> Unit = {}
-) {
+fun ManagerDashboardScreen(viewModel: SubscriptionViewModel, onLogout: () -> Unit, onMemberClick: (String) -> Unit) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val members by viewModel.members.collectAsStateWithLifecycle()
-    val activeSubscription by viewModel.activeSubscription.collectAsStateWithLifecycle()
-    val inviteCode by viewModel.inviteCode.collectAsStateWithLifecycle()
 
-    LaunchedEffect(subscriptionId) { viewModel.loadData() }
+    LaunchedEffect(Unit) { viewModel.loadData() }
 
     Box(
         modifier = Modifier.fillMaxSize()
@@ -54,23 +42,6 @@ fun ManagerDashboardScreen(
     ) {
         Scaffold(
             containerColor = Color.Transparent,
-            topBar = {
-                @OptIn(ExperimentalMaterial3Api::class)
-                TopAppBar(
-                    title = { Text(activeSubscription?.name ?: "Group Admin", color = Color.White) },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = onEditSubscription) {
-                            Icon(Icons.Filled.Edit, contentDescription = "Edit Group", tint = Color.White)
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                )
-            },
             bottomBar = {
                 NavigationBar(containerColor = Color(0xFF111827), tonalElevation = 0.dp) {
                     listOf(
@@ -96,7 +67,7 @@ fun ManagerDashboardScreen(
                 when (selectedTab) {
                     0 -> ManagerOverviewTab(members)
                     1 -> ManagerMembersTab(viewModel, members, onMemberClick)
-                    2 -> GroupSettingsTab(viewModel, activeSubscription, onLogout)
+                    2 -> AppSettingsTab(onLogout, viewModel) // Reuse from MemberDashboardScreen
                 }
             }
         }
@@ -450,7 +421,7 @@ fun ManagerMemberCard(member: MemberState, onMemberClick: (String) -> Unit) {
     val progress = if (member.totalMonthsPaid > 0) member.monthsUsed.toFloat() / member.totalMonthsPaid.toFloat() else 0f
     val animatedProgress by animateFloatAsState(progress.coerceIn(0f, 1f), tween(800), label = "p")
     val viewModel: SubscriptionViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
-    val pingSuccess by viewModel.successMessage.collectAsStateWithLifecycle()
+    val pingSuccess by viewModel.pingSuccess.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
 
     LaunchedEffect(pingSuccess) {
@@ -511,131 +482,5 @@ fun ManagerMemberCard(member: MemberState, onMemberClick: (String) -> Unit) {
                 }
             }
         }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────
-// Group-specific Settings Tab (inside Manager Dashboard)
-// Only shows group info + notification prefs. Main app settings
-// (update checker, profile, logout) are on the home screen.
-// ─────────────────────────────────────────────────────────────────
-@Composable
-fun GroupSettingsTab(
-    viewModel: SubscriptionViewModel,
-    subscription: com.example.subscriptionmanager.data.Subscription?,
-    onLogout: () -> Unit
-) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val sharedPrefs = context.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
-    var notificationsEnabled by remember { mutableStateOf(sharedPrefs.getBoolean("notifications_enabled", true)) }
-    var daysBefore by remember { mutableFloatStateOf(sharedPrefs.getInt("days_before_reminder", 4).toFloat()) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp)
-    ) {
-        Spacer(Modifier.height(16.dp))
-        Text("Group Settings", fontWeight = FontWeight.Bold, color = TextWhite, fontSize = 22.sp)
-        Text("Settings for this group", color = TextMuted, fontSize = 13.sp)
-        Spacer(Modifier.height(24.dp))
-
-        // Group Info Card
-        subscription?.let { sub ->
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = CardBg),
-                shape = RoundedCornerShape(20.dp)
-            ) {
-                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Group Info", fontWeight = FontWeight.SemiBold, color = TextWhite, fontSize = 16.sp)
-                    HorizontalDivider(color = Color(0xFF2D3A55))
-                    GroupInfoRow("Name", sub.name)
-                    GroupInfoRow("Monthly Cost", "Rs. ${sub.monthly_cost.toInt()}")
-                    GroupInfoRow("Billing Day", "${sub.billing_day}th of every month")
-                    GroupInfoRow("Max Members", sub.max_members.toString())
-                    GroupInfoRow("Started", sub.start_date)
-                }
-            }
-            Spacer(Modifier.height(16.dp))
-        }
-
-        // Notification Settings Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = CardBg),
-            shape = RoundedCornerShape(20.dp)
-        ) {
-            Column(Modifier.padding(20.dp)) {
-                Text("Notifications", fontWeight = FontWeight.SemiBold, color = TextWhite, fontSize = 16.sp)
-                Spacer(Modifier.height(16.dp))
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        Text("Payment Reminders", color = TextWhite, fontSize = 14.sp)
-                        Text("Notify members before due date", color = TextMuted, fontSize = 12.sp)
-                    }
-                    Switch(
-                        checked = notificationsEnabled,
-                        onCheckedChange = {
-                            notificationsEnabled = it
-                            sharedPrefs.edit().putBoolean("notifications_enabled", it).apply()
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = AccentGreen,
-                            checkedTrackColor = Color(0xFF1A2E20)
-                        )
-                    )
-                }
-                if (notificationsEnabled) {
-                    Spacer(Modifier.height(16.dp))
-                    Text("Remind ${daysBefore.toInt()} days before due date", color = TextMuted, fontSize = 13.sp)
-                    Slider(
-                        value = daysBefore,
-                        onValueChange = { daysBefore = it },
-                        onValueChangeFinished = {
-                            sharedPrefs.edit().putInt("days_before_reminder", daysBefore.toInt()).apply()
-                        },
-                        valueRange = 1f..7f,
-                        steps = 5,
-                        colors = SliderDefaults.colors(thumbColor = AccentGreen, activeTrackColor = AccentGreen)
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // Logout
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = CardBg),
-            shape = RoundedCornerShape(20.dp)
-        ) {
-            OutlinedButton(
-                onClick = onLogout,
-                modifier = Modifier.fillMaxWidth().padding(16.dp).height(52.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentRed),
-                border = androidx.compose.foundation.BorderStroke(1.5.dp, AccentRed)
-            ) {
-                Icon(Icons.Filled.Lock, null, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Logout", fontWeight = FontWeight.SemiBold)
-            }
-        }
-        Spacer(Modifier.height(24.dp))
-    }
-}
-
-@Composable
-private fun GroupInfoRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = TextMuted, fontSize = 13.sp)
-        Text(value, color = TextWhite, fontSize = 13.sp, fontWeight = FontWeight.Medium)
     }
 }

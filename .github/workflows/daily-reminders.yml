@@ -2,21 +2,26 @@ name: Daily Installment Reminders
 
 on:
   schedule:
-    # Runs at 04:00 UTC every day (which is roughly 9:30 AM in India/Sri Lanka)
+    # Runs at 04:00 UTC every day (9:30 AM Sri Lanka / India time)
     - cron: '0 4 * * *'
-  workflow_dispatch: # Allows manual trigger from the GitHub Actions tab
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force send reminders today (ignore day schedule)'
+        required: false
+        default: 'true'
 
 jobs:
   send-reminders:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Install dependencies
         working-directory: ./scripts
@@ -28,4 +33,5 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FORCE_SEND: ${{ github.event.inputs.force || 'false' }}
         run: npm start

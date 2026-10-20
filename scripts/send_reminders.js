@@ -3,7 +3,7 @@ const admin = require('firebase-admin');
 
 // 1. Initialize Supabase
 const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY; // Service Role Key or Anon Key
+const supabaseKey = process.env.SUPABASE_KEY; // Service Role Key
 
 if (!supabaseUrl || !supabaseKey) {
   console.error("Missing Supabase credentials in environment.");
@@ -25,139 +25,139 @@ if (!admin.apps.length) {
   });
 }
 
-function getDynamicMonthsUsed(startDateStr) {
-  const start = new Date(startDateStr);
+// Spotify Plan Constants
+const MONTHLY_COST = 211.0;
+const BILLING_DAY = 8;
+const START_YEAR = 2026;
+const START_MONTH = 5; // May 2026
+
+function getDynamicMonthsUsed() {
   const now = new Date();
-  const used = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()) + 1;
+  const y = now.getFullYear();
+  const m = now.getMonth() + 1;
+  const used = (y - START_YEAR) * 12 + (m - START_MONTH) + 1;
   return Math.max(1, used);
 }
 
-// Calculate days until billing day
-function getDaysUntilBilling(billingDay) {
-  const now = new Date();
-  const currentDay = now.getDate();
-  if (currentDay <= billingDay) {
-    return billingDay - currentDay;
-  } else {
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    return (daysInMonth - currentDay) + billingDay;
-  }
-}
-
 async function runReminders() {
+  const dynamicMonthsUsed = getDynamicMonthsUsed();
   const now = new Date();
   const currentDay = now.getDate();
+  const forceSend = process.env.FORCE_SEND === 'true' || process.env.MANUAL_RUN === 'true';
 
-  console.log(`Running reminder job for day ${currentDay}...`);
+  console.log(`=== Spotify Daily Reminder Job ===`);
+  console.log(`Current Date: ${now.toISOString().split('T')[0]} (Day ${currentDay})`);
+  console.log(`Months Used from Start: ${dynamicMonthsUsed}`);
+  console.log(`Force Send Override: ${forceSend}`);
 
-  // Fetch all subscriptions
-  const { data: subscriptions, error: subErr } = await supabase.from('subscriptions').select('*');
-  if (subErr) {
-    console.error("Failed to fetch subscriptions:", subErr);
-    process.exit(1);
+  // Schedule days:
+  // - Days 5, 6, 7: Upcoming (3, 2, 1 days before the 8th)
+  // - Day 8: Due TODAY
+  // - Days 9, 12, 15, 18, 21, 24, 27: Overdue reminders
+  const scheduledDays = [5, 6, 7, 8, 9, 12, 15, 18, 21, 24, 27];
+  const isScheduledDay = scheduledDays.includes(currentDay);
+
+  if (!isScheduledDay && !forceSend) {
+    console.log(`Today (Day ${currentDay}) is not a scheduled reminder day. Skipping.`);
+    console.log(`Scheduled reminder days: ${scheduledDays.join(', ')}`);
+    console.log(`Finished processing reminders.`);
+    return;
   }
 
-  // Fetch all members to get FCM tokens
+  // 1. Fetch all members
   const { data: members, error: memErr } = await supabase.from('members').select('*');
   if (memErr) {
     console.error("Failed to fetch members:", memErr);
     process.exit(1);
   }
 
-  const memberMap = new Map();
-  members.forEach(m => memberMap.set(m.id, m));
-
-  // Fetch all payments
+  // 2. Fetch all payments
   const { data: payments, error: payErr } = await supabase.from('payments').select('*');
   if (payErr) {
     console.error("Failed to fetch payments:", payErr);
     process.exit(1);
   }
 
-  // Fetch all subscription_members
-  const { data: subMembers, error: smErr } = await supabase.from('subscription_members').select('*');
-  if (smErr) {
-    console.error("Failed to fetch subscription_members:", smErr);
-    process.exit(1);
-  }
+  console.log(`Checking ${members.length} members...`);
 
-  for (const sub of subscriptions) {
-    const billingDay = sub.billing_day;
-    const daysUntilBilling = getDaysUntilBilling(billingDay);
-    const monthsUsed = getDynamicMonthsUsed(sub.start_date);
+  for (const member of members) {
+    const memberPayments = payments.filter(p => p.member_id === member.id);
+    const totalPaid = memberPayments.reduce((acc, p) => acc + p.amount, 0);
+    const totalMonthsPaid = Math.floor(totalPaid / MONTHLY_COST);
+    const remainingBalance = totalMonthsPaid - dynamicMonthsUsed;
 
-    // Only process if it's the exact billing day or 3 days before or 3 days after
-    const isDueToday = (currentDay === billingDay);
-    const isUpcoming = (daysUntilBilling > 0 && daysUntilBilling <= 3);
-    const isOverdue = (currentDay > billingDay && currentDay <= billingDay + 3) || (billingDay - currentDay < -25); // simple wrap logic
-
-    if (!isDueToday && !isUpcoming && !isOverdue) {
-        console.log(`[${sub.name}] Billing day is ${billingDay}. Today is ${currentDay}. Skipping.`);
-        continue;
+    if (remainingBalance >= 0) {
+      console.log(`✓ ${member.name}: Paid up (Balance: +${remainingBalance}).`);
+      continue;
     }
 
-    console.log(`[${sub.name}] Checking members... (Billing Day: ${billingDay}, Cost: ${sub.monthly_cost})`);
+    let messageTitle = "";
+    let messageBody = "";
 
-    const groupMembers = subMembers.filter(sm => sm.subscription_id === sub.id);
-
-    for (const sm of groupMembers) {
-      const member = memberMap.get(sm.member_id);
-      if (!member) continue;
-
-      const memberPayments = payments.filter(p => p.subscription_id === sub.id && p.member_id === member.id);
-      const totalPaid = memberPayments.reduce((acc, p) => acc + p.amount, 0);
-      const totalMonthsPaid = Math.floor(totalPaid / sub.monthly_cost);
-      const remainingBalance = totalMonthsPaid - monthsUsed;
-
-      if (remainingBalance >= 0) {
-        console.log(` - ${member.name} is paid up (Balance: +${remainingBalance}).`);
-        continue;
+    if (remainingBalance === -1 && currentDay <= BILLING_DAY) {
+      const daysLeft = BILLING_DAY - currentDay;
+      if (daysLeft === 0) {
+        messageTitle = "Spotify Payment Due Today! ⏰";
+        messageBody = `Heads up! Your Spotify payment of Rs. ${MONTHLY_COST} is due TODAY.`;
+      } else {
+        messageTitle = `Upcoming: Spotify Payment Due in ${daysLeft} day${daysLeft > 1 ? 's' : ''}`;
+        messageBody = `Reminder: Your Spotify payment of Rs. ${MONTHLY_COST} is due on the 8th!`;
       }
+    } else {
+      const monthsOwed = Math.abs(remainingBalance);
+      messageTitle = "Spotify Payment OVERDUE! ⚠️";
+      messageBody = `Your Spotify payment is OVERDUE (${monthsOwed} month${monthsOwed > 1 ? 's' : ''})! Please pay your outstanding balance of Rs. ${monthsOwed * MONTHLY_COST} ASAP.`;
+    }
 
-      let messageTitle = "";
-      let messageBody = "";
+    console.log(`! ${member.name}: Due (Balance: ${remainingBalance}). Notification: "${messageTitle}"`);
 
-      if (isDueToday) {
-        messageTitle = `${sub.name} Payment Due Today! ⏰`;
-        messageBody = `Heads up! Your payment of Rs. ${sub.monthly_cost} for ${sub.name} is due TODAY.`;
-      } else if (isUpcoming) {
-        messageTitle = `Upcoming: ${sub.name} Payment Due in ${daysUntilBilling} days`;
-        messageBody = `Reminder: Your payment of Rs. ${sub.monthly_cost} for ${sub.name} is due on the ${billingDay}th!`;
-      } else if (isOverdue) {
-        messageTitle = `${sub.name} Payment OVERDUE! ⚠️`;
-        messageBody = `Your payment for ${sub.name} is OVERDUE! Please pay your outstanding balance ASAP.`;
-      }
-
-      console.log(` - ${member.name} is due (Balance: ${remainingBalance}). Sending: ${messageTitle}`);
-
-      // Add to in-app notifications
+    // In-app notification
+    try {
       await supabase.from('notifications').insert({
         member_id: member.id,
-        subscription_id: sub.id,
         message: messageBody,
         is_read: false
       });
       console.log(`   > Created in-app notification for ${member.name}`);
+    } catch (e) {
+      console.error(`   > Failed to create in-app notification:`, e.message);
+    }
 
-      // Send Push Notification if FCM token exists
-      if (member.fcm_token) {
-        const payload = {
+    // Push notification via FCM
+    if (member.fcm_token) {
+      const payload = {
+        notification: {
+          title: messageTitle,
+          body: messageBody
+        },
+        data: {
+          title: messageTitle,
+          body: messageBody,
+          channelId: 'payment_reminders'
+        },
+        android: {
+          priority: 'high',
           notification: {
-            title: messageTitle,
-            body: messageBody
-          },
-          token: member.fcm_token
-        };
+            channelId: 'payment_reminders',
+            sound: 'default',
+            priority: 'high'
+          }
+        },
+        token: member.fcm_token
+      };
 
-        try {
-          const response = await admin.messaging().send(payload);
-          console.log(`   > Sent push notification to ${member.name}: ${response}`);
-        } catch (error) {
-          console.error(`   > Error sending push to ${member.name}:`, error);
+      try {
+        const response = await admin.messaging().send(payload);
+        console.log(`   > Sent push notification to ${member.name}: ${response}`);
+      } catch (error) {
+        console.error(`   > Error sending push to ${member.name}:`, error.message);
+        if (error.code === 'messaging/registration-token-not-registered' || error.code === 'messaging/invalid-registration-token') {
+          console.log(`   > Token no longer valid. Clearing stale token for ${member.name}.`);
+          await supabase.from('members').update({ fcm_token: null }).eq('id', member.id);
         }
-      } else {
-        console.log(`   > No FCM token for ${member.name}, skipping push.`);
       }
+    } else {
+      console.log(`   > No FCM token registered for ${member.name}, push skipped.`);
     }
   }
 
