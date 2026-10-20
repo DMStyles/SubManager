@@ -9,7 +9,11 @@ if (!supabaseUrl || !supabaseKey) {
   console.error("Missing Supabase credentials in environment.");
   process.exit(1);
 }
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    persistSession: false
+  }
+});
 
 // 2. Initialize Firebase Admin
 let firebaseConfigStr = process.env.FIREBASE_SERVICE_ACCOUNT;
